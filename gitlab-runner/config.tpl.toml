@@ -16,8 +16,9 @@ shutdown_timeout = 0
   [runners.cache]
     MaxUploadedArchiveSize = 0
   [runners.docker]
-    image = "nexus.scanframe.com:8090/gnu-cpp:dev"
+    image = "<docker-image>"
     tls_verify = false
+    #pull_policy = "always"
     pull_policy = "if-not-present"
     # Needed for fuse.
     privileged = true

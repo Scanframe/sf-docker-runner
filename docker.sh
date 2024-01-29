@@ -102,9 +102,16 @@ done
 for cmd in ${argument}; do
 	case "${cmd}" in
 
+		info)
+			docker system df
+			;;
+
+		prune)
+			# Prune build cache.
+			docker buildx prune --all
+			;;
+
 		repo | repository)
-#				-H 'NX-ANTI-CSRF-TOKEN: 0.49084790528129085' \
-#				-H 'X-Nexus-UI: true' \
 			curl -v \
 				-u "${DOCKER_USER}:${DOCKER_PASSWORD}" \
 				-X 'GET' \
@@ -122,16 +129,6 @@ for cmd in ${argument}; do
 
 		search)
 			docker search "${DOCKER_REPOSITORY}/t*" --format "{{.Name}}"
-			;;
-
-		info)
-			docker system df
-			# sudo ~/bin/disk-usage.sh 1 /var/lib/docker
-			;;
-
-		prune)
-			# Prune build cache.
-			docker buildx prune --all
 			;;
 
 		tag)
@@ -166,22 +163,7 @@ for cmd in ${argument}; do
 			# Pull the image from the Nexus server.
 			docker pull "${DOCKER_REPOSITORY}/${IMG_NAME}"
 			# Add tag without the Nexus server prefix.
-			#docker tag "${DOCKER_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
-			;;
-
-		docker)
-			docker run \
-				--privileged \
-				--rm \
-				--interactive \
-				--tty \
-				--name="docker-docker" \
-				--volume /var/run/docker.sock:/var/run/docker.sock \
-				--volume "${PROJECT_DIR}:/root/project:ro" \
-				--net=host \
-				--hostname "${HOSTNAME}" \
-				docker:stable \
-				/bin/sh -c 'source ~/project/bin/.profile && /bin/sh'
+			docker tag "${DOCKER_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
 			;;
 
 		buildx)
@@ -191,7 +173,7 @@ for cmd in ${argument}; do
 				echo "Stopping containers using image '${IMG_NAME}'."
 				docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
 			fi
-			# Build the image using the 'docker' subdirectory as the context.
+			# Build the image.
 			docker buildx build \
 				--build-arg DOCKER_USER_ID="$(id -u)" \
 				--progress=plain \
@@ -208,13 +190,13 @@ for cmd in ${argument}; do
 				echo "Stopping containers using image '${IMG_NAME}'."
 				docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
 			fi
-			#--no-cache
-			# Build the image using the 'docker' subdirectory as the context.
+			# Build the image.
 			docker build \
 				--build-arg DOCKER_USER_ID="$(id -u)" \
 				--progress=plain \
 				--file "${DOCKER_FILE}" \
 				--tag "${IMG_NAME}" \
+				--network host \
 				"${WORK_DIR}"
 			;;
 
@@ -233,6 +215,28 @@ for cmd in ${argument}; do
 				/bin/bash --login
 			;;
 
+		stop | kill)
+			# Stop this docker container only.
+			cntr_id="$(docker ps --filter name="${CNTR_NAME}" --quiet)"
+			if [[ -n "${cntr_id}" ]]; then
+				echo "Container ID is '${cntr_id}' and performing '${cmd}' command."
+				docker "${cmd}" "${cntr_id}"
+			else
+				echo "Container '${CNTR_NAME}' is not running."
+			fi
+			;;
+
+		status)
+			# Show the status of the container.
+			docker ps --filter name="${CNTR_NAME}"
+			;;
+
+		attach)
+			# Connect to the last started container using new bash shell.
+			#docker start "${CNTR_NAME}"
+			docker exec -it "${CNTR_NAME}" /bin/bash
+			;;
+
 		make)
 			if [[ -z "${PROJECT}" ]]; then
 				echo "Project (option: -p) is required for this command."
@@ -248,30 +252,8 @@ for cmd in ${argument}; do
 				--volume "${PROJECT_DIR}:/mnt/project:rw" \
 				--net=host \
 				--hostname "${HOSTNAME}" \
-			"${IMG_NAME}" \
+				"${IMG_NAME}" \
 				/bin/bash --login -c "make-project.sh '${PROJECT}'"
-			;;
-
-		stop | kill)
-			# Stop this docker container only.
-			cntr_id="$(docker ps --filter name="${CNTR_NAME}" --quiet)"
-			if [[ -n "${cntr_id}" ]]; then
-				echo "Container ID is '${cntr_id}' and performing '${cmd}' command."
-				docker "${cmd}" "${cntr_id}"
-			else
-				echo "Container '${CNTR_NAME}' is not running."
-			fi
-			;;
-
-		status)
-			# Stop this docker container only.
-			docker ps --filter name="${CNTR_NAME}"
-			;;
-
-		attach)
-			# Connect to the last started container using new bash shell.
-			docker start "${CNTR_NAME}"
-			docker exec -it "${CNTR_NAME}" /bin/bash
 			;;
 
 		*)

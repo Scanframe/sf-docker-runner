@@ -86,108 +86,106 @@ while true; do
 	esac
 done
 
-# Get the arguments in an array.
-argument=""
-while [[ $# -gt 0 ]]; do
-	argument="${argument} $1"
+
+# Get the subcommand.
+cmd=""
+if [[ $# -gt 0 ]]; then
+	cmd="$1"
 	shift
-done
+fi
 
 mkdir --parents "${CONFIG_DIR}" || exit 1
 
-# Iterate over the command arguments.
-for cmd in ${argument}; do
-	case "${cmd}" in
+case "${cmd}" in
 
-		reg | register)
-			# Stop all containers using this image.
-			# shellcheck disable=SC2046
-			if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
-				echo "Stopping containers using image '${IMG_NAME}'."
-				docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
-			fi
-			#	--device /dev/fuse --privileged
-			docker run \
-				--name "${CONTAINER_NAME}" --rm --tty --interactive \
-				--user "0:$(id -g)" \
-				--cap-add SYS_ADMIN --security-opt apparmor:unconfined \
-				--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
-				--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
-				--hostname "${HOSTNAME}" \
-				"${IMG_NAME}" register \
-				--url "${URL_GITLAB}" \
-				--token "${REG_TOKEN}" \
-				--executor "docker" \
-				;;
-
-		daemon)
-			# Stop all containers using this image.
-			# shellcheck disable=SC2046
-			if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
-				echo "Stopping containers using image '${IMG_NAME}'."
-				docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
-			fi
-			# --restart always
-			# --env DATA_DIR="/tmp/config" \
-			docker --debug run --rm --detach \
-				--name "${CONTAINER_NAME}" \
-				--user "0:$(id -g)" \
-				--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
-				--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
-				--hostname "${HOSTNAME}" \
-				"${IMG_NAME}"
+	reg | register)
+		# Stop all containers using this image.
+		# shellcheck disable=SC2046
+		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
+			echo "Stopping containers using image '${IMG_NAME}'."
+			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
+		fi
+		#	--device /dev/fuse --privileged
+		docker run \
+			--name "${CONTAINER_NAME}" --rm --tty --interactive \
+			--user "0:$(id -g)" \
+			--cap-add SYS_ADMIN --security-opt apparmor:unconfined \
+			--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
+			--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
+			--hostname "${HOSTNAME}" \
+			"${IMG_NAME}" register \
+			--url "${URL_GITLAB}" \
+			--token "${REG_TOKEN}" \
+			--executor "docker" \
 			;;
 
-		run)
-			# Stop all containers using this image.
-			# shellcheck disable=SC2046
-			if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
-				echo "Stopping containers using image '${IMG_NAME}'."
-				docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
-			fi
-			# --restart always
-			# --env DATA_DIR="/tmp/config" \
-			docker --debug run --rm \
-				--name "${CONTAINER_NAME}" \
-				--user "0:$(id -g)" \
-				--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
-				--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
-				--hostname "${HOSTNAME}" \
-				"${IMG_NAME}"
-			;;
+	daemon)
+		# Stop all containers using this image.
+		# shellcheck disable=SC2046
+		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
+			echo "Stopping containers using image '${IMG_NAME}'."
+			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
+		fi
+		# --restart always
+		# --env DATA_DIR="/tmp/config" \
+		docker --debug run --rm --detach \
+			--name "${CONTAINER_NAME}" \
+			--user "0:$(id -g)" \
+			--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
+			--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
+			--hostname "${HOSTNAME}" \
+			"${IMG_NAME}"
+		;;
 
-		attach)
-			# Connect to the last started container using new bash shell.
-			docker start "${CONTAINER_NAME}"
-			docker exec --interactive --tty "${CONTAINER_NAME}" /bin/bash
-			;;
+	run)
+		# Stop all containers using this image.
+		# shellcheck disable=SC2046
+		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
+			echo "Stopping containers using image '${IMG_NAME}'."
+			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
+		fi
+		# --restart always
+		# --env DATA_DIR="/tmp/config" \
+		docker --debug run --rm \
+			--name "${CONTAINER_NAME}" \
+			--user "0:$(id -g)" \
+			--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
+			--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
+			--hostname "${HOSTNAME}" \
+			"${IMG_NAME}"
+		;;
 
-		stop | kill)
-			# Stop this docker container only.
-			cntr_id="$(docker ps --filter name="${CONTAINER_NAME}" --quiet)"
-			if [[ -n "${cntr_id}" ]]; then
-				echo "Container ID is '${cntr_id}' and performing '${cmd}' command."
-				docker "${cmd}" "${cntr_id}"
-			else
-				echo "Container '${CONTAINER_NAME}' is not running."
-			fi
-			;;
+	attach)
+		# Connect to the last started container using new bash shell.
+		docker start "${CONTAINER_NAME}"
+		docker exec --interactive --tty "${CONTAINER_NAME}" /bin/bash
+		;;
 
-		status | list)
-			docker run --rm --tty --interactive \
-				--name "${CONTAINER_NAME}" \
-				--user "0:$(id -g)" \
-				--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
-				--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
-				--hostname "${HOSTNAME}" \
-				"${IMG_NAME}" "${cmd}"
-			;;
+	stop | kill)
+		# Stop this docker container only.
+		cntr_id="$(docker ps --filter name="${CONTAINER_NAME}" --quiet)"
+		if [[ -n "${cntr_id}" ]]; then
+			echo "Container ID is '${cntr_id}' and performing '${cmd}' command."
+			docker "${cmd}" "${cntr_id}"
+		else
+			echo "Container '${CONTAINER_NAME}' is not running."
+		fi
+		;;
 
-		*)
-			echo "Command '${cmd}' is invalid!"
-			ShowHelp
-			exit 1
-			;;
+	status | list)
+		docker run --rm --tty --interactive \
+			--name "${CONTAINER_NAME}" \
+			--user "0:$(id -g)" \
+			--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
+			--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
+			--hostname "${HOSTNAME}" \
+			"${IMG_NAME}" "${cmd}"
+		;;
 
-	esac
-done
+	*)
+		echo "Command '${cmd}' is invalid!"
+		ShowHelp
+		exit 1
+		;;
+
+esac
