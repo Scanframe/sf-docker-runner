@@ -2,19 +2,17 @@
 
 # Get the script directory.
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
+# Read the credentials from non repository file.
+source "${SCRIPT_DIR}/.nexus-credentials"
 # Location of the project files when externally provided.
-#PROJECT_DIR="$(realpath "${SCRIPT_DIR}/project")"
 PROJECT_DIR="$(realpath "${SCRIPT_DIR}")"
-# Nexus Server URL.
-NEXUS_PROTO="http://"
-NEXUS_SRV="10.0.3.210:8084"
 # Set the image name to be used.
-IMG_NAME="test:dev"
+IMG_NAME="gnu-cpp:dev"
 # Set container name to be used.
-CNTR_NAME="test-dev"
+CNTR_NAME="gnu-cpp"
 # Location project file.
 PROJECT=""
-CREDENTIALS="arjan:xs4nexus!"
+# Hostname for the docker container.
 HOSTNAME="c++build"
 
 # Prints the help.
@@ -23,7 +21,7 @@ function ShowHelp {
 	local cmd_name
 	# Get only the filename of the current script.
 	cmd_name="$(basename "${0}")"
-	echo "Usage: ${cmd_name} [<options>] [info | push | pull build | buildx | run | make | stop | kill | status | attach]
+	echo "Usage: ${cmd_name} [<options>] [info | login | logout | push | pull | build | buildx | run | make | stop | kill | status | attach]
   Execute a single or multiple actions for docker and/or it's container.
 
   Options:
@@ -104,21 +102,26 @@ done
 for cmd in ${argument}; do
 	case "${cmd}" in
 
-		repository)
-			curl \
-				-u "${CREDENTIALS}" \
-				-X 'GET' 'https://nexus.scanframe.com/service/rest/v1/repositories/docker/hosted/docker-image' \
+		repo | repository)
+#				-H 'NX-ANTI-CSRF-TOKEN: 0.49084790528129085' \
+#				-H 'X-Nexus-UI: true' \
+			curl -v \
+				-u "${DOCKER_USER}:${DOCKER_PASSWORD}" \
+				-X 'GET' \
 				-H 'accept: application/json' \
-				-H 'NX-ANTI-CSRF-TOKEN: 0.49084790528129085' \
-				-H 'X-Nexus-UI: true'
+				"${NEXUS_SERVER_URL}/service/rest/v1/repositories/docker/hosted/docker-image"
 			;;
 
 		list)
-			docker image ls --all "${NEXUS_SRV}/*"
+			# docker image ls --all "*"
+			curl -v \
+			-u "${DOCKER_USER}:${DOCKER_PASSWORD}" \
+			-X 'GET' \
+			"${NEXUS_SERVER_URL}/service/rest/v1/search/assets?repository=docker-image&format=docker"
 			;;
 
 		search)
-			docker search "${NEXUS_SRV}/t*" --format "{{.Name}}"
+			docker search "${DOCKER_REPOSITORY}/t*" --format "{{.Name}}"
 			;;
 
 		info)
@@ -133,52 +136,52 @@ for cmd in ${argument}; do
 
 		tag)
 			# Add a tag as when it was uploaded.
-			docker tag "${NEXUS_SRV}/${IMG_NAME}" "${IMG_NAME}"
+			docker tag "${DOCKER_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
 			;;
 
 		login)
-			docker login "${NEXUS_SRV}"
+			docker login -u "${DOCKER_USER}" -p "${DOCKER_PASSWORD}" "${DOCKER_REPOSITORY}"
 			;;
 
-		remove)
-			#docker run --rm registry-cli:1.0.1 -l "${CREDENTIALS}" -r "http://{$NEXUS_SRV}" "test"
-			docker run --rm "anoxis/registry-cli" -l "${CREDENTIALS}" -r "http://{$NEXUS_SRV}" "test"
-			#	-H 'accept: application/json' \
-			#docker image ls --all "${NEXUS_SRV}/*" --format "{{.Repository}}"
-			#curl -u "${CREDENTIALS}" -I -X GET "http://{$NEXUS_SRV}/v2/"
-			#curl -u "${CREDENTIALS}" -I -X DELETE "http://{$NEXUS_SRV}/v2/docker-image/images/test/dev/"
-			echo "Exit code $?"
-#			if [[ $? -ne 0 ]]; then
-#				echo "Remove remote image failed!"
-#			fi
+		logout)
+			docker logout "${DOCKER_REPOSITORY}"
+			;;
+
+		rm | remove)
+			echo "Must still be implemented."
+    ;;
+
+		del | delete)
+			echo "Must still be implemented."
     ;;
 
 		push)
-			#docker login -u arjan -p "xs4nexus!" nexus.scanframe.com:443
-			docker login "${NEXUS_SRV}"
-			docker push "${NEXUS_SRV}/${IMG_NAME}"
+			docker login -u "${DOCKER_USER}" -p "${DOCKER_PASSWORD}" login "${DOCKER_REPOSITORY}"
+			docker push "${DOCKER_REPOSITORY}/${IMG_NAME}"
 			;;
 
 		pull)
+			# Logout from any current server.
 			docker logout
-			docker pull "${NEXUS_SRV}/${IMG_NAME}"
-			docker tag "${IMG_NAME}" "${NEXUS_SRV}/${IMG_NAME}"
+			# Pull the image from the Nexus server.
+			docker pull "${DOCKER_REPOSITORY}/${IMG_NAME}"
+			# Add tag without the Nexus server prefix.
+			#docker tag "${DOCKER_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
 			;;
 
 		docker)
-#			--privileged \
 			docker run \
-			--rm \
-			--interactive \
-			--tty \
-			--name="docker-docker" \
-			--volume /var/run/docker.sock:/var/run/docker.sock \
-			--volume "${PROJECT_DIR}:/root/project:ro" \
-			--net=host \
-			--hostname "${HOSTNAME}" \
-			docker:stable \
-			/bin/sh -c 'source ~/project/bin/.profile && /bin/sh'
-			#'docker:dind'
+				--privileged \
+				--rm \
+				--interactive \
+				--tty \
+				--name="docker-docker" \
+				--volume /var/run/docker.sock:/var/run/docker.sock \
+				--volume "${PROJECT_DIR}:/root/project:ro" \
+				--net=host \
+				--hostname "${HOSTNAME}" \
+				docker:stable \
+				/bin/sh -c 'source ~/project/bin/.profile && /bin/sh'
 			;;
 
 		buildx)
