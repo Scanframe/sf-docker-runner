@@ -99,12 +99,13 @@ case "${cmd}" in
 			--rm \
 			--name "${CONTAINER_NAME}" \
 			--publish 9000:9000 \
+			--publish 9001:9001 \
 			--user "$(id -u):$(id -g)" \
 			--volume "${SCRIPT_DIR}/minio/data:${MOUNT_DIR}" \
 			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
 			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
 			--net=host \
-			"${IMG_NAME}" server "${MOUNT_DIR}"
+			"${IMG_NAME}" server "${MOUNT_DIR}" --console-address ":9001"
 		;;
 
 	start)
@@ -114,17 +115,18 @@ case "${cmd}" in
 			echo "Stopping containers using image '${IMG_NAME}'."
 			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
 		fi
+		#	--net=host \
 		docker run \
 			--rm \
 			--detach \
 			--name "${CONTAINER_NAME}" \
 			--publish 9000:9000 \
+			--publish 9001:9001 \
 			--user "$(id -u):$(id -g)" \
 			--volume "${SCRIPT_DIR}/minio/data:${MOUNT_DIR}" \
 			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
 			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
-			--net=host \
-			"${IMG_NAME}" server "${MOUNT_DIR}"
+			"${IMG_NAME}" server "${MOUNT_DIR}" --console-address ":9001"
 		;;
 
 	stop | kill)
@@ -139,9 +141,9 @@ case "${cmd}" in
 		;;
 
 	mc)
+		#	--net=host \
 		docker run \
 			--interactive --tty \
-			--net=host \
 			--hostname="mino-ctl" \
 			--volume "${SCRIPT_DIR}/minio/bin:/root/bin" \
 			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
