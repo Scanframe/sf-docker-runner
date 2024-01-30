@@ -115,6 +115,7 @@ case "${cmd}" in
 			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
 		fi
 		docker run \
+			--rm \
 			--detach \
 			--name "${CONTAINER_NAME}" \
 			--publish 9000:9000 \
