@@ -20,6 +20,7 @@ function ShowHelp {
   Commands:
     start  : Runs the docker server container in the background.
     stop   : Stops a background running server.
+    kill   : Kills a background running server.
     run    : Runs the docker server container interactively.
     mc     : Runs the Minio control command line.
 "
@@ -83,33 +84,46 @@ fi
 
 # Set the image name to be used.
 IMG_NAME="minio/minio:latest"
+MOUNT_DIR="/data"
 
 # Process subcommand.
 case "${cmd}" in
 	run)
+		# Stop all containers using this image.
+		# shellcheck disable=SC2046
+		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
+			echo "Stopping containers using image '${IMG_NAME}'."
+			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
+		fi
 		docker run \
 			--rm \
 			--name "${CONTAINER_NAME}" \
 			--publish 9000:9000 \
 			--user "$(id -u):$(id -g)" \
-			--volume "${SCRIPT_DIR}/minio/data:/mnt/data" \
+			--volume "${SCRIPT_DIR}/minio/data:${MOUNT_DIR}" \
 			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
 			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
 			--net=host \
-			"${IMG_NAME}" server "/mnt/data"
+			"${IMG_NAME}" server "${MOUNT_DIR}"
 		;;
 
 	start)
+		# Stop all containers using this image.
+		# shellcheck disable=SC2046
+		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
+			echo "Stopping containers using image '${IMG_NAME}'."
+			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
+		fi
 		docker run \
 			--detach \
 			--name "${CONTAINER_NAME}" \
 			--publish 9000:9000 \
 			--user "$(id -u):$(id -g)" \
-			--volume "${SCRIPT_DIR}/minio/data:/mnt/data" \
+			--volume "${SCRIPT_DIR}/minio/data:${MOUNT_DIR}" \
 			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
 			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
 			--net=host \
-			"${IMG_NAME}" server "/mnt/data"
+			"${IMG_NAME}" server "${MOUNT_DIR}"
 		;;
 
 	stop | kill)
