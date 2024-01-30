@@ -2,4 +2,5 @@
 gitlab-runner/.runner_system_id
 gitlab-runner/config.toml
 .nexus-credentials
+.minio-credentials
 minio/data

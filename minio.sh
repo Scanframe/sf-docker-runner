@@ -3,7 +3,7 @@
 # Get the script directory.
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
 # Read the credentials from non repository file.
-source "${SCRIPT_DIR}/.nexus-credentials"
+source "${SCRIPT_DIR}/.minio-credentials"
 
 # Prints the help.
 #
@@ -11,25 +11,20 @@ function ShowHelp {
 	local cmd_name
 	# Get only the filename of the current script.
 	cmd_name="$(basename "${0}")"
-	echo "Usage: ${cmd_name} [<options>] [info | login | logout | push | pull | build | buildx | run | make | stop | kill | status | attach]
+	echo "Usage: ${cmd_name} [<options>] [start | stop | run | mc]
   Execute a single or multiple actions for docker and/or it's container.
 
   Options:
     -h, --help    : Show this help.
-    -p, --project : Borland C++ Builder Project-file (.bpr|.bpk|.bat|.cmd)
 
-  Commands/Steps:
-    General:
-      build  : Builds the docker image '${IMG_NAME}'.
-      make   : Makes/runs the project file set with option '-p' or '--project'.
-    Additional:
-      run    : Runs the docker container '${CNTR_NAME}' without an x-server connected.
-      stop   : Stops the container '${CNTR_NAME}' by name.
-      kill   : Kills the container '${CNTR_NAME}' by name.
-      status : Return the status of the container '${CNTR_NAME}' by name.
-      attach : Attaches to the running container '${CNTR_NAME}'.
+  Commands:
+    start  : Runs the docker server container in the background.
+    stop   : Stops a background running server.
+    run    : Runs the docker server container interactively.
+    mc     : Runs the Minio control command line.
 "
 }
+
 
 # When no arguments or options are given show the help.
 if [[ $# -eq 0 ]]; then
@@ -39,6 +34,9 @@ fi
 
 # Change to the current script directory.
 cd "${SCRIPT_DIR}" || exit 1
+
+# Container name of the minio server.
+CONTAINER_NAME="minio-server"
 
 # Parse options.
 TEMP=$(getopt -o 'hp:' --long 'help,project:' -n "$(basename "${0}")" -- "$@")
@@ -58,11 +56,11 @@ while true; do
 			exit 0
 			;;
 
-		-f | --file)
-			FILE="${2}"
-			shift 2
-			continue
-			;;
+#		-f | --file)
+#			FILE="${2}"
+#			shift 2
+#			continue
+#			;;
 
 		'--')
 			shift
@@ -83,32 +81,46 @@ if [[ $# -gt 0 ]]; then
 	shift
 fi
 
-NEXUS_REPO="https:/nexus.scanframe.com"
+# Set the image name to be used.
+IMG_NAME="minio/minio:latest"
 
+# Process subcommand.
 case "${cmd}" in
-
-	list)
-		curl -v -X GET "${NEXUS_REPO}/service/rest/v1/search?repository=gitlab-runner-cache"
-		;;
-
-	upload)
-		#	--fail --user user:password
-		curl -v \
-			--upload-file "${SCRIPT_DIR}/README.md" \
-			"${NEXUS_REPO}/repository/gitlab-runner-cache/testing/test-README.md"
-		;;
-
-	minio)
+	run)
 		docker run \
 			--rm \
-			--name "minio-server" \
+			--name "${CONTAINER_NAME}" \
 			--publish 9000:9000 \
 			--user "$(id -u):$(id -g)" \
-			--volume "${SCRIPT_DIR}/minio/data:/data" \
-			--env "MINIO_ACCESS_KEY=access_key" \
-			--env "MINIO_SECRET_KEY=access_key_secret" \
+			--volume "${SCRIPT_DIR}/minio/data:/mnt/data" \
+			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
+			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
 			--net=host \
-			minio/minio server /data
+			"${IMG_NAME}" server "/mnt/data"
+		;;
+
+	start)
+		docker run \
+			--detach \
+			--name "${CONTAINER_NAME}" \
+			--publish 9000:9000 \
+			--user "$(id -u):$(id -g)" \
+			--volume "${SCRIPT_DIR}/minio/data:/mnt/data" \
+			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
+			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
+			--net=host \
+			"${IMG_NAME}" server "/mnt/data"
+		;;
+
+	stop | kill)
+		# Stop this docker container only.
+		cntr_id="$(docker ps --filter name="${CONTAINER_NAME}" --quiet)"
+		if [[ -n "${cntr_id}" ]]; then
+			echo "Container ID is '${cntr_id}' and performing '${cmd}' command."
+			docker "${cmd}" "${cntr_id}"
+		else
+			echo "Container '${CONTAINER_NAME}' is not running."
+		fi
 		;;
 
 	mc)
@@ -117,9 +129,10 @@ case "${cmd}" in
 			--net=host \
 			--hostname="mino-ctl" \
 			--volume "${SCRIPT_DIR}/minio/bin:/root/bin" \
-			--env "MINIO_ACCESS_KEY=access_key" \
-			--env "MINIO_SECRET_KEY=access_key_secret" \
-			--entrypoint=/bin/bash \
+			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
+			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
+			--env "MINIO_URL=${MINIO_URL}" \
+			--entrypoint="/bin/bash" \
 			minio/mc
 		;;
 
@@ -128,5 +141,4 @@ case "${cmd}" in
 		ShowHelp
 		exit 1
 		;;
-
 esac
