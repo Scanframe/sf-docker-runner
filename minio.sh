@@ -36,9 +36,6 @@ fi
 # Change to the current script directory.
 cd "${SCRIPT_DIR}" || exit 1
 
-# Container name of the minio server.
-CONTAINER_NAME="minio-server"
-
 # Parse options.
 TEMP=$(getopt -o 'hp:' --long 'help,project:' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
@@ -82,6 +79,8 @@ if [[ $# -gt 0 ]]; then
 	shift
 fi
 
+# Container name of the minio server.
+CONTAINER_NAME="minio-server"
 # Set the image name to be used.
 IMG_NAME="minio/minio:latest"
 MOUNT_DIR="/data"
@@ -95,6 +94,7 @@ case "${cmd}" in
 			echo "Stopping containers using image '${IMG_NAME}'."
 			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
 		fi
+		# --net=host \
 		docker run \
 			--rm \
 			--name "${CONTAINER_NAME}" \
@@ -104,7 +104,6 @@ case "${cmd}" in
 			--volume "${SCRIPT_DIR}/minio/data:${MOUNT_DIR}" \
 			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
 			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
-			--net=host \
 			"${IMG_NAME}" server "${MOUNT_DIR}" --console-address ":9001"
 		;;
 
@@ -141,7 +140,6 @@ case "${cmd}" in
 		;;
 
 	mc)
-		#	--net=host \
 		docker run \
 			--interactive --tty \
 			--hostname="mino-ctl" \
@@ -150,6 +148,7 @@ case "${cmd}" in
 			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
 			--env "MINIO_URL=${MINIO_URL}" \
 			--entrypoint="/bin/bash" \
+			--net=host \
 			minio/mc
 		;;
 
