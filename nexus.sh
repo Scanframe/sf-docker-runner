@@ -2,13 +2,20 @@
 
 # Get the script directory.
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
+
+# Check if the required credential file exists.
+if [[ ! -f "${SCRIPT_DIR}/.nexus-credentials" ]]; then
+	echo "File '${SCRIPT_DIR}/.nexus-credentials' is required."
+	exit 1
+fi
+
 # Read the credentials from non repository file.
 source "${SCRIPT_DIR}/.nexus-credentials"
 
 REPO_URL="${NEXUS_SERVER_URL}/repository/"
-USER="${DOCKER_USER}"
-PASSWORD="${DOCKER_PASSWORD}"
-BUCKET="${DOCKER_REPO_NAME}"
+USER="${NEXUS_USER}"
+PASSWORD="${NEXUS_PASSWORD}"
+BUCKET="${NEXUS_REPO_NAME}"
 
 KEEP_IMAGES=0
 

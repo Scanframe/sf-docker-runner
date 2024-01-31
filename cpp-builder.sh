@@ -2,18 +2,12 @@
 
 # Get the script directory.
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
-# Read the credentials from non repository file.
-source "${SCRIPT_DIR}/.nexus-credentials"
-# Location of the project files when externally provided.
-PROJECT_DIR="$(realpath "${SCRIPT_DIR}")"
 # Set the image name to be used.
 IMG_NAME="gnu-cpp:dev"
 # Set container name to be used.
-CNTR_NAME="gnu-cpp"
-# Location project file.
-PROJECT=""
+CONTAINER_NAME="gnu-cpp"
 # Hostname for the docker container.
-HOSTNAME="c++build"
+HOSTNAME="cpp-builder"
 
 # Prints the help.
 #
@@ -30,14 +24,16 @@ function ShowHelp {
 
   Commands/Steps:
     General:
-      build  : Builds the docker image '${IMG_NAME}'.
-      make   : Makes/runs the project file set with option '-p' or '--project'.
+      build  : Builds the docker image tagded for self hosted repository.
+      push   : Pushes the docker image to the self hosted repository.
+      pull   : Pulls the docker image from the self hosted repository.
     Additional:
-      run    : Runs the docker container '${CNTR_NAME}' without an x-server connected.
-      stop   : Stops the container '${CNTR_NAME}' by name.
-      kill   : Kills the container '${CNTR_NAME}' by name.
-      status : Return the status of the container '${CNTR_NAME}' by name.
-      attach : Attaches to the running container '${CNTR_NAME}'.
+      make   : Makes/runs the project file set with option '-p' or '--project'.
+      run    : Runs the docker container in the foreground.
+      stop   : Stops the container running in the background.
+      kill   : Kills the container running in the background.
+      status : Return the status of the container running in the background.
+      attach : Attaches to the running container running in the background.
 "
 }
 
@@ -47,8 +43,19 @@ if [[ $# -eq 0 ]]; then
 	exit 1
 fi
 
+# Check if the required credential file exists.
+if [[ ! -f "${SCRIPT_DIR}/.nexus-credentials" ]]; then
+	echo "File '${SCRIPT_DIR}/.nexus-credentials' is required."
+	exit 1
+fi
+# Read the credentials from non repository file.
+source "${SCRIPT_DIR}/.nexus-credentials"
+# Location of the project files when externally provided.
+PROJECT_DIR="$(realpath "${SCRIPT_DIR}")"
+# Location project file.
+PROJECT=""
 # Get the work directory.
-WORK_DIR="$(realpath "${SCRIPT_DIR}")"
+WORK_DIR="$(realpath "${SCRIPT_DIR}")/cpp-builder"
 # The absolute docker file location.
 DOCKER_FILE="${WORK_DIR}/Dockerfile"
 
@@ -113,7 +120,7 @@ for cmd in ${argument}; do
 
 		repo | repository)
 			curl -v \
-				-u "${DOCKER_USER}:${DOCKER_PASSWORD}" \
+				-u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 				-X 'GET' \
 				-H 'accept: application/json' \
 				"${NEXUS_SERVER_URL}/service/rest/v1/repositories/docker/hosted/docker-image"
@@ -122,26 +129,26 @@ for cmd in ${argument}; do
 		list)
 			# docker image ls --all "*"
 			curl -v \
-			-u "${DOCKER_USER}:${DOCKER_PASSWORD}" \
+			-u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			-X 'GET' \
 			"${NEXUS_SERVER_URL}/service/rest/v1/search/assets?repository=docker-image&format=docker"
 			;;
 
 		search)
-			docker search "${DOCKER_REPOSITORY}/t*" --format "{{.Name}}"
+			docker search "${NEXUS_REPOSITORY}/t*" --format "{{.Name}}"
 			;;
 
 		tag)
 			# Add a tag as when it was uploaded.
-			docker tag "${DOCKER_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
+			docker tag "${NEXUS_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
 			;;
 
 		login)
-			docker login -u "${DOCKER_USER}" -p "${DOCKER_PASSWORD}" "${DOCKER_REPOSITORY}"
+			echo -n "${NEXUS_PASSWORD}" | docker login --username "${NEXUS_USER}" --password-stdin "${NEXUS_REPOSITORY}"
 			;;
 
 		logout)
-			docker logout "${DOCKER_REPOSITORY}"
+			docker logout "${NEXUS_REPOSITORY}"
 			;;
 
 		rm | remove)
@@ -153,17 +160,18 @@ for cmd in ${argument}; do
     ;;
 
 		push)
-			docker login -u "${DOCKER_USER}" -p "${DOCKER_PASSWORD}" login "${DOCKER_REPOSITORY}"
-			docker push "${DOCKER_REPOSITORY}/${IMG_NAME}"
+			# First login and then push it.
+			#echo -n "${NEXUS_PASSWORD}" | docker login --username "${NEXUS_USER}" --password-stdin "${NEXUS_REPOSITORY}" && \
+			docker image push "${NEXUS_REPOSITORY}/${IMG_NAME}"
 			;;
 
 		pull)
 			# Logout from any current server.
 			docker logout
 			# Pull the image from the Nexus server.
-			docker pull "${DOCKER_REPOSITORY}/${IMG_NAME}"
+			docker pull "${NEXUS_REPOSITORY}/${IMG_NAME}"
 			# Add tag without the Nexus server prefix.
-			docker tag "${DOCKER_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
+			docker tag "${NEXUS_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
 			;;
 
 		buildx)
@@ -175,8 +183,7 @@ for cmd in ${argument}; do
 			fi
 			# Build the image.
 			docker buildx build \
-				--build-arg DOCKER_USER_ID="$(id -u)" \
-				--progress=plain \
+				--build-arg NEXUS_USER_ID="$(id -u)" \
 				--file "${DOCKER_FILE}" \
 				--tag "${IMG_NAME}" \
 				--network host \
@@ -192,10 +199,9 @@ for cmd in ${argument}; do
 			fi
 			# Build the image.
 			docker build \
-				--build-arg DOCKER_USER_ID="$(id -u)" \
-				--progress=plain \
+				--build-arg NEXUS_USER_ID="$(id -u)" \
 				--file "${DOCKER_FILE}" \
-				--tag "${IMG_NAME}" \
+				--tag "${NEXUS_REPOSITORY}/${IMG_NAME}" \
 				--network host \
 				"${WORK_DIR}"
 			;;
@@ -205,7 +211,7 @@ for cmd in ${argument}; do
 				--rm \
 				--interactive \
 				--tty \
-				--name="${CNTR_NAME}" \
+				--name="${CONTAINER_NAME}" \
 				--env LOCAL_USER_ID="$(id -u "${USER}")" \
 				--env LOCAL_GROUP_ID="$(id -g "${USER}")" \
 				--volume "${PROJECT_DIR}:/mnt/project:rw" \
@@ -217,24 +223,24 @@ for cmd in ${argument}; do
 
 		stop | kill)
 			# Stop this docker container only.
-			cntr_id="$(docker ps --filter name="${CNTR_NAME}" --quiet)"
+			cntr_id="$(docker ps --filter name="${CONTAINER_NAME}" --quiet)"
 			if [[ -n "${cntr_id}" ]]; then
 				echo "Container ID is '${cntr_id}' and performing '${cmd}' command."
 				docker "${cmd}" "${cntr_id}"
 			else
-				echo "Container '${CNTR_NAME}' is not running."
+				echo "Container '${CONTAINER_NAME}' is not running."
 			fi
 			;;
 
 		status)
 			# Show the status of the container.
-			docker ps --filter name="${CNTR_NAME}"
+			docker ps --filter name="${CONTAINER_NAME}"
 			;;
 
 		attach)
 			# Connect to the last started container using new bash shell.
-			#docker start "${CNTR_NAME}"
-			docker exec -it "${CNTR_NAME}" /bin/bash
+			#docker start "${CONTAINER_NAME}"
+			docker exec -it "${CONTAINER_NAME}" /bin/bash
 			;;
 
 		make)
@@ -246,7 +252,7 @@ for cmd in ${argument}; do
 				--rm \
 				--interactive \
 				--tty \
-				--name="${CNTR_NAME}" \
+				--name="${CONTAINER_NAME}" \
 				--env LOCAL_USER_ID="$(id -u "${USER}")" \
 				--env LOCAL_GROUP_ID="$(id -g "${USER}")" \
 				--volume "${PROJECT_DIR}:/mnt/project:rw" \

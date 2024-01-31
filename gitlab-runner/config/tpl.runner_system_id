@@ -1,0 +1,5 @@
+##
+# A file '.runner_system_id' is created when it does not exist.
+# To have a single entry in the runners section under the same registration
+# copy the existing 'System-ID' from the registered runner in GitLab.
+##

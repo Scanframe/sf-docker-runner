@@ -2,19 +2,6 @@
 
 # Get the script directory.
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
-# Set container name to be used.
-CONTAINER_NAME="gitlab-runner"
-# Set the image name to be used.
-IMG_NAME="gitlab/gitlab-runner:latest"
-# Location of the configuration directory.
-CONFIG_DIR="$(realpath "${SCRIPT_DIR}")/gitlab-runner"
-#CONFIG_DIR="/tmp/gitlab-runner"
-# GitLab URL.
-URL_GITLAB="https://git.scanframe.com"
-# Registration token.
-REG_TOKEN="<my token>"
-# Hostname of the docker running gitlab-runner.
-HOSTNAME="gitlab-runner"
 
 # Prints the help.
 #
@@ -31,13 +18,12 @@ function ShowHelp {
 
   Commands/Steps:
     General:
-      register,
-      reg      : Register the GitLab runner (use token option).
-      run      : Run the runner interactively.
-      daemon   : Run the runner as a daemon.
-      attach   : Attach to a console of the Docker container.
-      stop,
-      kill     : Stops a background running runner.
+      register: Register the GitLab runner (use token option).
+      run     : Run the runner interactively.
+      start   : Run the runner in the background.
+      attach  : Attach to a console of the Docker container.
+      stop    : Stops a background running runner.
+      kill    : Kills a background running runner.
 "
 }
 
@@ -46,6 +32,19 @@ if [[ $# -eq 0 ]]; then
 	ShowHelp
 	exit 1
 fi
+
+# Set container name to be used.
+CONTAINER_NAME="gitlab-runner"
+# Set the image name to be used.
+IMG_NAME="gitlab/gitlab-runner:latest"
+# Location of the configuration directory.
+CONFIG_DIR="$(realpath "${SCRIPT_DIR}")/gitlab-runner/config"
+# GitLab URL.
+URL_GITLAB="https://git.scanframe.com"
+# Registration token.
+REG_TOKEN="<my token>"
+# Hostname of the docker running gitlab-runner.
+HOSTNAME="gitlab-runner"
 
 # Change to the current script directory.
 cd "${SCRIPT_DIR}" || exit 1
@@ -68,7 +67,7 @@ while true; do
 			exit 0
 			;;
 
-		-p | --project)
+		-t | --token)
 			REG_TOKEN="${2}"
 			shift 2
 			continue
@@ -86,7 +85,6 @@ while true; do
 	esac
 done
 
-
 # Get the subcommand.
 cmd=""
 if [[ $# -gt 0 ]]; then
@@ -94,11 +92,9 @@ if [[ $# -gt 0 ]]; then
 	shift
 fi
 
-mkdir --parents "${CONFIG_DIR}" || exit 1
-
 case "${cmd}" in
 
-	reg | register)
+	register)
 		# Stop all containers using this image.
 		# shellcheck disable=SC2046
 		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
@@ -119,24 +115,6 @@ case "${cmd}" in
 			--executor "docker" \
 			;;
 
-	daemon)
-		# Stop all containers using this image.
-		# shellcheck disable=SC2046
-		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
-			echo "Stopping containers using image '${IMG_NAME}'."
-			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
-		fi
-		# --restart always
-		# --env DATA_DIR="/tmp/config" \
-		docker --debug run --rm --detach \
-			--name "${CONTAINER_NAME}" \
-			--user "0:$(id -g)" \
-			--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
-			--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
-			--hostname "${HOSTNAME}" \
-			"${IMG_NAME}"
-		;;
-
 	run)
 		# Stop all containers using this image.
 		# shellcheck disable=SC2046
@@ -147,6 +125,24 @@ case "${cmd}" in
 		# --restart always
 		# --env DATA_DIR="/tmp/config" \
 		docker --debug run --rm \
+			--name "${CONTAINER_NAME}" \
+			--user "0:$(id -g)" \
+			--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
+			--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
+			--hostname "${HOSTNAME}" \
+			"${IMG_NAME}"
+		;;
+
+	start)
+		# Stop all containers using this image.
+		# shellcheck disable=SC2046
+		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
+			echo "Stopping containers using image '${IMG_NAME}'."
+			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
+		fi
+		# --restart always
+		# --env DATA_DIR="/tmp/config" \
+		docker --debug run --rm --detach \
 			--name "${CONTAINER_NAME}" \
 			--user "0:$(id -g)" \
 			--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \

@@ -2,8 +2,6 @@
 
 # Get the script directory.
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
-# Read the credentials from non repository file.
-source "${SCRIPT_DIR}/.minio-credentials"
 
 # Prints the help.
 #
@@ -12,20 +10,26 @@ function ShowHelp {
 	# Get only the filename of the current script.
 	cmd_name="$(basename "${0}")"
 	echo "Usage: ${cmd_name} [<options>] [start | stop | run | mc]
-  Execute a single or multiple actions for docker and/or it's container.
+  Execute a MinIO docker commands for server and command-line control.
+  Depends on the file '.minio-credentials' used as include file and contains
+  variables named MINIO_SERVER_URL, MINIO_ACCESS_KEY and MINIO_SECRET_KEY.
 
   Options:
     -h, --help    : Show this help.
 
   Commands:
-    start  : Runs the docker server container in the background.
-    stop   : Stops a background running server.
-    kill   : Kills a background running server.
     run    : Runs the docker server container interactively.
-    mc     : Runs the Minio control command line.
+    start  : Runs the docker server container in the background as a daemon.
+    stop   : Stops the server running in the background.
+    kill   : Kills the server running in the background.
+    login  : Creates a CLI configuration in the 'minio/config' directory adding
+             the host/alias named 'vps'.
+    bash   : Like login but the entrypoint is '/bin/bash' to investigate errors.
+    mc     : Runs the Minio CLI command.
+             To list entries on host 'vps': '$(basename "$0") -- ls -r vps'.
+             To remove entries on host 'vps': '$(basename "$0") -- ls -r vps/my-bucket/my-path'.
 "
 }
-
 
 # When no arguments or options are given show the help.
 if [[ $# -eq 0 ]]; then
@@ -33,11 +37,14 @@ if [[ $# -eq 0 ]]; then
 	exit 1
 fi
 
+# Read the credentials from non repository file.
+source "${SCRIPT_DIR}/.minio-credentials"
+
 # Change to the current script directory.
 cd "${SCRIPT_DIR}" || exit 1
 
 # Parse options.
-TEMP=$(getopt -o 'hp:' --long 'help,project:' -n "$(basename "${0}")" -- "$@")
+TEMP=$(getopt -o 'h' --long 'help' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	ShowHelp
@@ -53,12 +60,6 @@ while true; do
 			ShowHelp
 			exit 0
 			;;
-
-#		-f | --file)
-#			FILE="${2}"
-#			shift 2
-#			continue
-#			;;
 
 		'--')
 			shift
@@ -81,9 +82,16 @@ fi
 
 # Container name of the minio server.
 CONTAINER_NAME="minio-server"
+# Container name of the minio control.
+CONTAINER_NAME_MC="minio-mc"
 # Set the image name to be used.
 IMG_NAME="minio/minio:latest"
+# Image name for the CLI.
+IMG_NAME_MC="minio/mc:latest"
+# Directory in the container where the data is stored.
 MOUNT_DIR="/data"
+# Configuration directory inside the CLI container.
+MC_CFG_DIR="/tmp/mc"
 
 # Process subcommand.
 case "${cmd}" in
@@ -139,17 +147,55 @@ case "${cmd}" in
 		fi
 		;;
 
-	mc)
+	bash)
 		docker run \
+			--rm \
+			--name "${CONTAINER_NAME_MC}" \
 			--interactive --tty \
 			--hostname="mino-ctl" \
-			--volume "${SCRIPT_DIR}/minio/bin:/root/bin" \
+			--user "$(id -u):$(id -g)" \
+			--volume "${SCRIPT_DIR}/minio/bin/login.sh:/usr/local/bin/mc-login:ro" \
+			--volume "${SCRIPT_DIR}/minio/config:${MC_CFG_DIR}:rw" \
 			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
 			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
 			--env "MINIO_URL=${MINIO_URL}" \
-			--entrypoint="/bin/bash" \
+			--env "MC_CFG_DIR=${MC_CFG_DIR}" \
 			--net=host \
-			minio/mc
+			--entrypoint="bash" \
+			"${IMG_NAME_MC}"
+		;;
+
+	login)
+		docker run \
+			--rm \
+			--name "${CONTAINER_NAME_MC}" \
+			--interactive --tty \
+			--hostname="mino-ctl" \
+			--user "$(id -u):$(id -g)" \
+			--volume "${SCRIPT_DIR}/minio/bin/login.sh:/usr/local/bin/mc-login:ro" \
+			--volume "${SCRIPT_DIR}/minio/config:${MC_CFG_DIR}:rw" \
+			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
+			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
+			--env "MINIO_URL=${MINIO_URL}" \
+			--env "MC_CFG_DIR=${MC_CFG_DIR}" \
+			--net=host \
+			--entrypoint="mc-login" \
+			"${IMG_NAME_MC}"
+		;;
+
+	mc)
+		docker run \
+			--rm \
+			--name "${CONTAINER_NAME_MC}" \
+			--interactive --tty \
+			--hostname="mino-ctl" \
+			--user "$(id -u):$(id -g)" \
+			--volume "${SCRIPT_DIR}/minio/bin/entrypoint.sh:/usr/local/bin/mc-entrypoint:ro" \
+			--volume "${SCRIPT_DIR}/minio/config:${MC_CFG_DIR}:rw" \
+			--env "MC_CFG_DIR=${MC_CFG_DIR}" \
+			--net=host \
+			--entrypoint="mc-entrypoint" \
+			"${IMG_NAME_MC}" "$@"
 		;;
 
 	*)

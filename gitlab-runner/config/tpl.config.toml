@@ -1,0 +1,53 @@
+concurrent = 1
+check_interval = 0
+shutdown_timeout = 0
+
+[session_server]
+  session_timeout = 1800
+
+[[runners]]
+  name = "Docker"
+  url = "<gitlab-url>"
+  token = "<gitlab-token>"
+  token_obtained_at = 2024-01-26T19:52:16Z
+  token_expires_at = 0001-01-01T00:00:00Z
+  executor = "docker"
+  # Environment variable actually not needed at this point.
+  environment = ["BIND_DIR=/tmp/binder"]
+
+  [runners.cache]
+    # # Types available s3, gcs, azure.
+    Type = "s3"
+    # Type = "s3"
+    Shared = true
+    # # Name of the path to prepend to the cache URL.
+    Path = "cache"
+    # # Limit, in bytes, of the cache archive being uploaded to cloud storage.
+    # MaxUploadedArchiveSize = 0 
+
+  [runners.cache.s3]
+    ServerAddress = "<minio-server-url>"    
+    Insecure = true
+    AccessKey = "<key-name>"
+    SecretKey = "<key-secret>"
+    BucketName = "<bucket-name-for-cache>"
+
+  [runners.docker]
+    image = "<private-or-global-image-name>"
+    tls_verify = false
+    pull_policy = "always"
+    # Needed for fuse to be working.
+    privileged = true
+    # Optional other way to enable fuse inside the container.
+    #cap_add = ["SYS_ADMIN", "MKNOD"]
+    #devices = ["/dev/fuse"]
+    #security-opt = ["apparmor:unconfined"]
+    disable_entrypoint_overwrite = false
+    oom_kill_disable = false
+    disable_cache = false
+    # Location of the local cache on a separate volume.
+    # (probably not needed when using a remote cache as MinIO.)
+    volumes = ["/cache"]
+    shm_size = 0
+    network_mtu = 0
+  
