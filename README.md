@@ -1,4 +1,4 @@
-# Docker & GitLab-Runner
+# Docker & GitLab-Runner & CLion
 
 ## Purpose
 
@@ -6,6 +6,7 @@ The purpose is multiple:
 1. Using Docker to run a GitLab runner which use Docker images to execute jobs.
 2. Create a Docker image for building C++ projects which are uploaded to a self-hosted Sonatype Nexus server.
 3. Enable GitLab runner cache using the S3-API from a self-hosted MinIO server using a Docker image.
+4. Use the Docker image in JetBrain's CLion for checking the image only.
 
 ### 1) GitLab-Runner via Docker
 
@@ -30,3 +31,16 @@ is created to handle it.
 Set up MinIO server using a docker image named (`minio/minio:latest`) and for the controlling 
 the server from the command line the image (`minio/mc:latest`).  
 For easy usage and set up the script [minio.sh](minio.sh "Link to the script.") is used.
+
+### 4) CLion Using Docker the Image  
+
+To have CLion compile CMake projects using Qt arguments passed to the Docker `run` command need to be 
+changed in order to have the original [entrypoint](cpp-builder/bin/entrypoint.sh) to execute the command.
+CLion Docker command-line arguments: `--rm --privileged --user 0:0 --env USER_LOCAL="<uid>:<gid>"`
+where **uid** and **gid** is the current users user and group id. 
+Debugging is not possible since the intermediate `entrypoint.sh` script prevents this.
+Running a console application is possible from CLion.  
+Running GUI applications the X11 socket needs to be configured with additional run options  
+`--env DISPLAY --volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro"`.
+CLion does not do variable expansion for Docker command line arguments so expand them manually.
+

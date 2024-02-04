@@ -20,20 +20,25 @@ function ShowHelp {
 
   Options:
     -h, --help    : Show this help.
-    -p, --project : Borland C++ Builder Project-file (.bpr|.bpk|.bat|.cmd)
+    -p, --project : Project directory which is mounted in '/mnt/project' and has a symlink '~/project'.
 
-  Commands/Steps:
-    General:
-      build  : Builds the docker image tagded for self hosted repository.
-      push   : Pushes the docker image to the self hosted repository.
-      pull   : Pulls the docker image from the self hosted repository.
-    Additional:
-      make   : Makes/runs the project file set with option '-p' or '--project'.
-      run    : Runs the docker container in the foreground.
-      stop   : Stops the container running in the background.
-      kill   : Kills the container running in the background.
-      status : Return the status of the container running in the background.
-      attach : Attaches to the running container running in the background.
+  Commands:
+    build     : Builds the docker image tagged 'gnu-cpp:dev' for self hosted Nexus repository and zipped Qt libraries.
+    push      : Pushes the docker image to the self hosted Nexus repository.
+    pull      : Pulls the docker image from the self hosted Nexus repository.
+    info      : Show general docker information.
+    prune     : Remove all Docker build cache.
+    login     : Log Docker in on the Nexus repository.
+    logout    : Log docker out from any repository.
+    qt-lnx    : Generates the 'qt-win.zip' from the current users Linux Qt library.
+    qt-win    : Generates the qt-win-zip from the current users Windows Qt library.
+    qt-lnx-up : Uploads the generated zip-file to the Nexus server as 'repository/shared/library/qt-lnx.zip'.
+    qt-win-up : Uploads the generated zip-file to the Nexus server as 'repository/shared/library/qt-win.zip'.
+    run       : Runs the docker container named 'gnu-cpp' in the foreground mounting the passed project directory.
+    stop      : Stops the container named 'gnu-cpp' running in the background.
+    kill      : Kills the container named 'gnu-cpp' running in the background.
+    status    : Return the status of named 'gnu-cpp' the container running in the background.
+    attach    : Attaches to the  in the background running container named 'gnu-cpp'.
 "
 }
 
@@ -52,12 +57,14 @@ fi
 source "${SCRIPT_DIR}/.nexus-credentials"
 # Location of the project files when externally provided.
 PROJECT_DIR="$(realpath "${SCRIPT_DIR}")"
-# Location project file.
-PROJECT=""
 # Get the work directory.
 WORK_DIR="$(realpath "${SCRIPT_DIR}")/cpp-builder"
 # The absolute docker file location.
 DOCKER_FILE="${WORK_DIR}/Dockerfile"
+# Zip file containing thw Qt library.
+QT_LNX_ZIP="/tmp/qt-lnx.zip"
+# Zip file containing thw Qt library.
+QT_WIN_ZIP="/tmp/qt-win.zip"
 
 # Change to the current script directory.
 cd "${SCRIPT_DIR}" || exit 1
@@ -81,7 +88,7 @@ while true; do
 			;;
 
 		-p | --project)
-			PROJECT="${2}"
+			PROJECT_DIR="${2}"
 			shift 2
 			continue
 			;;
@@ -98,175 +105,195 @@ while true; do
 	esac
 done
 
-# Get the arguments in an array.
-argument=""
-while [[ $# -gt 0 ]]; do
-	argument="${argument} $1"
+# Get the subcommand.
+cmd=""
+if [[ $# -gt 0 ]]; then
+	cmd="$1"
 	shift
-done
+fi
 
-# Iterate over the command arguments.
-for cmd in ${argument}; do
-	case "${cmd}" in
+case "${cmd}" in
 
-		info)
-			docker system df
-			;;
+	info)
+		docker system df
+		;;
 
-		prune)
-			# Prune build cache.
-			docker buildx prune --all
-			;;
+	prune)
+		# Prune build cache.
+		docker buildx prune --all
+		;;
 
-		repo | repository)
-			curl -v \
-				-u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-				-X 'GET' \
-				-H 'accept: application/json' \
-				"${NEXUS_SERVER_URL}/service/rest/v1/repositories/docker/hosted/docker-image"
-			;;
+	repo | repository)
+		curl -v \
+			-u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+			-X 'GET' \
+			-H 'accept: application/json' \
+			"${NEXUS_SERVER_URL}/service/rest/v1/repositories/docker/hosted/docker-image"
+		;;
 
-		list)
-			# docker image ls --all "*"
-			curl -v \
+	list)
+		# docker image ls --all "*"
+		curl -v \
 			-u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			-X 'GET' \
 			"${NEXUS_SERVER_URL}/service/rest/v1/search/assets?repository=docker-image&format=docker"
-			;;
+		;;
 
-		search)
-			docker search "${NEXUS_REPOSITORY}/t*" --format "{{.Name}}"
-			;;
+	search)
+		docker search "${NEXUS_REPOSITORY}/t*" --format "{{.Name}}"
+		;;
 
-		tag)
-			# Add a tag as when it was uploaded.
-			docker tag "${NEXUS_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
-			;;
+	login)
+		echo -n "${NEXUS_PASSWORD}" | docker login --username "${NEXUS_USER}" --password-stdin "${NEXUS_REPOSITORY}"
+		;;
 
-		login)
-			echo -n "${NEXUS_PASSWORD}" | docker login --username "${NEXUS_USER}" --password-stdin "${NEXUS_REPOSITORY}"
-			;;
+	logout)
+		docker logout "${NEXUS_REPOSITORY}"
+		;;
 
-		logout)
-			docker logout "${NEXUS_REPOSITORY}"
-			;;
+	qt-lnx)
+		LIB_DIR="${HOME}/lib"
+		[[ -f "${QT_LNX_ZIP}" ]] && rm "${QT_LNX_ZIP}"
+		pushd "${LIB_DIR}/Qt" || exit 1
+		zip --display-bytes --recurse-paths --symlinks "${QT_LNX_ZIP}" 6.6.1/gcc_64/{bin,lib,include,libexec,mkspecs,plugins}
+		popd || exit 1
+		ls -lah "${QT_LNX_ZIP}"
+		;;
 
-		rm | remove)
-			echo "Must still be implemented."
-    ;;
+	qt-lnx-up)
+		# Upload file Linux Qt library.
+		curl \
+			--progress-bar \
+			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+			--upload-file "${QT_LNX_ZIP}" \
+			"${NEXUS_SERVER_URL}/repository/shared/library/qt-lnx.zip"
+		;;
 
-		del | delete)
-			echo "Must still be implemented."
-    ;;
+	qt-win)
+		rm "${QT_WIN_ZIP}"
+		cd ~/lib/QtWin || exit 1
+		zip --display-bytes --recurse-paths --symlinks "${QT_WIN_ZIP}" 6.6.1/mingw_64/{bin,lib,include,libexec,mkspecs} -x "*.exe"
+		ls -lah "${QT_WIN_ZIP}"
+		;;
 
-		push)
-			# First login and then push it.
-			#echo -n "${NEXUS_PASSWORD}" | docker login --username "${NEXUS_USER}" --password-stdin "${NEXUS_REPOSITORY}" && \
-			docker image push "${NEXUS_REPOSITORY}/${IMG_NAME}"
-			;;
+	qt-win-up)
+		# Upload file Windows Qt library.
+		curl \
+			--progress-bar \
+			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+			--upload-file "${QT_WIN_ZIP}" \
+			"${NEXUS_SERVER_URL}/repository/shared/library/qt-win.zip"
+		;;
 
-		pull)
-			# Logout from any current server.
-			docker logout
-			# Pull the image from the Nexus server.
-			docker pull "${NEXUS_REPOSITORY}/${IMG_NAME}"
-			# Add tag without the Nexus server prefix.
-			docker tag "${NEXUS_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
-			;;
+	rm | remove)
+		echo "Must still be implemented."
+		;;
 
-		buildx)
-			# Stop all containers using this image.
-			# shellcheck disable=SC2046
-			if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
-				echo "Stopping containers using image '${IMG_NAME}'."
-				docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
-			fi
-			# Build the image.
-			docker buildx build \
-				--build-arg NEXUS_USER_ID="$(id -u)" \
-				--file "${DOCKER_FILE}" \
-				--tag "${IMG_NAME}" \
-				--network host \
-				"${WORK_DIR}"
-			;;
+	del | delete)
+		echo "Must still be implemented."
+		;;
 
-		build)
-			# Stop all containers using this image.
-			# shellcheck disable=SC2046
-			if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
-				echo "Stopping containers using image '${IMG_NAME}'."
-				docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
-			fi
-			# Build the image.
-			docker build \
-				--build-arg NEXUS_USER_ID="$(id -u)" \
-				--file "${DOCKER_FILE}" \
-				--tag "${NEXUS_REPOSITORY}/${IMG_NAME}" \
-				--network host \
-				"${WORK_DIR}"
-			;;
+	push)
+		# Add tag to having the correct prefix so it can be pushed to a private repository.
+		docker tag "${NEXUS_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
+		# Push the repository.
+		docker image push "${NEXUS_REPOSITORY}/${IMG_NAME}"
+		;;
 
-		run)
-			docker run \
-				--rm \
-				--interactive \
-				--tty \
-				--name="${CONTAINER_NAME}" \
-				--env LOCAL_USER_ID="$(id -u "${USER}")" \
-				--env LOCAL_GROUP_ID="$(id -g "${USER}")" \
-				--volume "${PROJECT_DIR}:/mnt/project:rw" \
-				--net=host \
-				--hostname "${HOSTNAME}" \
-				"${IMG_NAME}" \
-				/bin/bash --login
-			;;
+	pull)
+		# Logout from any current server.
+		docker logout
+		# Pull the image from the Nexus server.
+		docker pull "${NEXUS_REPOSITORY}/${IMG_NAME}"
+		# Add tag without the Nexus server prefix.
+		docker tag "${NEXUS_REPOSITORY}/${IMG_NAME}" "${IMG_NAME}"
+		;;
 
-		stop | kill)
-			# Stop this docker container only.
-			cntr_id="$(docker ps --filter name="${CONTAINER_NAME}" --quiet)"
-			if [[ -n "${cntr_id}" ]]; then
-				echo "Container ID is '${cntr_id}' and performing '${cmd}' command."
-				docker "${cmd}" "${cntr_id}"
-			else
-				echo "Container '${CONTAINER_NAME}' is not running."
-			fi
-			;;
+	buildx)
+		# Stop all containers using this image.
+		# shellcheck disable=SC2046
+		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
+			echo "Stopping containers using image '${IMG_NAME}'."
+			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
+		fi
+		# Build the image.
+		docker buildx build \
+			--build-arg NEXUS_USER_ID="$(id -u)" \
+			--file "${DOCKER_FILE}" \
+			--tag "${IMG_NAME}" \
+			--network host \
+			"${WORK_DIR}"
+		;;
 
-		status)
-			# Show the status of the container.
-			docker ps --filter name="${CONTAINER_NAME}"
-			;;
+	build)
+		# Stop all containers using this image.
+		# shellcheck disable=SC2046
+		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
+			echo "Stopping containers using image '${IMG_NAME}'."
+			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
+		fi
+		# Build the image.
+		docker build \
+			--build-arg NEXUS_USER_ID="$(id -u)" \
+			--file "${DOCKER_FILE}" \
+			--tag "${IMG_NAME}" \
+			--network host \
+			"${WORK_DIR}"
+		# Add also the private repository tag.
+		docker tag "${IMG_NAME}" "${NEXUS_REPOSITORY}/${IMG_NAME}"
+		;;
 
-		attach)
-			# Connect to the last started container using new bash shell.
-			#docker start "${CONTAINER_NAME}"
-			docker exec -it "${CONTAINER_NAME}" /bin/bash
-			;;
-
-		make)
-			if [[ -z "${PROJECT}" ]]; then
-				echo "Project (option: -p) is required for this command."
-				exit 1
-			fi
-			docker run \
-				--rm \
-				--interactive \
-				--tty \
-				--name="${CONTAINER_NAME}" \
-				--env LOCAL_USER_ID="$(id -u "${USER}")" \
-				--env LOCAL_GROUP_ID="$(id -g "${USER}")" \
-				--volume "${PROJECT_DIR}:/mnt/project:rw" \
-				--net=host \
-				--hostname "${HOSTNAME}" \
-				"${IMG_NAME}" \
-				/bin/bash --login -c "make-project.sh '${PROJECT}'"
-			;;
-
-		*)
-			echo "Command '${cmd}' is invalid!"
-			ShowHelp
+	run)
+		if [[ -z "${PROJECT_DIR}" ]]; then
+			echo "Project (option: -p) is required for this command."
 			exit 1
-			;;
+		fi
+		#--device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
+		#--volume "$(realpath "${HOME}/lib/Qt/"):/usr/local/lib/Qt:ro" \
+		#--volume "$(realpath "${HOME}/lib/QtWin/"):/usr/local/lib/QtWin:ro" \
+		docker run \
+			--rm \
+			--interactive \
+			--tty \
+			--name="${CONTAINER_NAME}" \
+			--net=host \
+			--env LOCAL_USER="$(id -u):$(id -g)" \
+			--env DISPLAY \
+			--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro" \
+			--volume "${PROJECT_DIR}:/mnt/project:rw" \
+			--privileged \
+			"${IMG_NAME}" "${@}"
+		;;
 
-	esac
-done
+	stop | kill)
+		# Stop this docker container only.
+		cntr_id="$(docker ps --filter name="${CONTAINER_NAME}" --quiet)"
+		if [[ -n "${cntr_id}" ]]; then
+			echo "Container ID is '${cntr_id}' and performing '${cmd}' command."
+			docker "${cmd}" "${cntr_id}"
+		else
+			echo "Container '${CONTAINER_NAME}' is not running."
+		fi
+		;;
+
+	status)
+		# Show the status of the container.
+		docker ps --filter name="${CONTAINER_NAME}"
+		;;
+
+	attach)
+		# Connect to the last started container as user 'user'.
+		if [[ $# -eq 0 ]]; then
+			docker exec -it "${CONTAINER_NAME}" sudo --login --user=user
+		else
+			docker exec -it "${CONTAINER_NAME}" sudo --login --user=user -- "${@}"
+		fi
+		;;
+
+	*)
+		echo "Command '${cmd}' is invalid!"
+		ShowHelp
+		exit 1
+		;;
+
+esac

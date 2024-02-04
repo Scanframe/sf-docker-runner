@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 
 MAINTAINER "Arjan van Olphen <arjan@scanframe.nl"
-LABEL Description="C++ project build container with support for Windows cross compile." Version="1.1"
+LABEL Description="C++/Qt project build container with support for Windows cross compile." Version="0.1"
 
 ## Let apt-get know we are running in noninteractive mode
 ENV DEBIAN_FRONTEND noninteractive
@@ -13,9 +13,22 @@ RUN sed -i -e 's/http:\/\/archive\.ubuntu\.com\/ubuntu\//http:\/\/nl.archive.ubu
 # Make sure image is up-to-date
 RUN apt-get update && apt-get --yes upgrade
 #
-RUN apt-get --yes install sudo wget git make cmake ninja-build \
+RUN apt-get --yes install locales sudo wget git make cmake ninja-build \
     gcc g++ g++-mingw-w64-x86-64 gdb bindfs fuse-zip \
-    exif doxygen graphviz dialog jq recode default-jre-headless
+    exif doxygen graphviz dialog jq recode default-jre-headless \
+    joe mc strace exiftool
+
+# Install needed libraries for compiling.
+RUN apt-get --yes install libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev
+
+# Install needed libraries for running a Qt GUI application.
+RUN apt-get --yes install x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
+
+# Qt requires locale UTF8.
+RUN echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
 
 # Use '/bin/bash' instead of default '/bin/sh'.
 SHELL ["/bin/bash", "-c"]
@@ -24,8 +37,13 @@ SHELL ["/bin/bash", "-c"]
 # Also used to put the build context into.
 WORKDIR "/home/user"
 
-ENV USER_ID 1001
-ENV GROUP_ID 1001
+# Get the compressed Qt library.
+RUN wget "https://nexus.scanframe.com/repository/shared/library/qt-lnx.zip" -O "qt-lnx.zip"
+# Get the compressed QtWin library.
+RUN wget "https://nexus.scanframe.com/repository/shared/library/qt-win.zip" -O "qt-win.zip"
+
+ENV USER_ID 9001
+ENV GROUP_ID 9001
 
 RUN addgroup --gid ${GROUP_ID} user
 RUN useradd --shell /bin/bash -u ${USER_ID} -g ${GROUP_ID} -o -c "" -m user
@@ -64,8 +82,9 @@ alias l='ls $\LS_OPTIONS -CF'\n" > "${HOME}/.bashrc"
 # Allow fuse by others.
 RUN sed -i -e 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
 
-# Make sure the user inside the docker has the same ID as the user outside
+# Make sure the user inside the docker container has the same ID as the user outside
 COPY --chown="user:user" --chmod=755 bin/*.sh "${HOME}/bin/"
 
+# Create the entry point.
 RUN chmod 755 "${HOME}/bin/entrypoint.sh"
 ENTRYPOINT ["/home/user/bin/entrypoint.sh"]
