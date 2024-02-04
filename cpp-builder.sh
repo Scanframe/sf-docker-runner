@@ -2,6 +2,8 @@
 
 # Get the script directory.
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
+# Set the base image name of the FROM statement used.
+BASE_IMG_NAME="ubuntu:22.04"
 # Set the image name to be used.
 IMG_NAME="gnu-cpp:dev"
 # Set container name to be used.
@@ -23,7 +25,7 @@ function ShowHelp {
     -p, --project : Project directory which is mounted in '/mnt/project' and has a symlink '~/project'.
 
   Commands:
-    build     : Builds the docker image tagged 'gnu-cpp:dev' for self hosted Nexus repository and zipped Qt libraries.
+    build     : Builds the docker image tagged 'gnu-cpp:dev' for self hosted Nexus repository and requires zipped Qt libraries.
     push      : Pushes the docker image to the self hosted Nexus repository.
     pull      : Pulls the docker image from the self hosted Nexus repository.
     info      : Show general docker information.
@@ -55,6 +57,8 @@ if [[ ! -f "${SCRIPT_DIR}/.nexus-credentials" ]]; then
 fi
 # Read the credentials from non repository file.
 source "${SCRIPT_DIR}/.nexus-credentials"
+# Offset of the Nexus server URL to the zipped libraries.
+RAW_LIB_OFFSET="repository/shared/library"
 # Location of the project files when externally provided.
 PROJECT_DIR="$(realpath "${SCRIPT_DIR}")"
 # Get the work directory.
@@ -143,6 +147,12 @@ case "${cmd}" in
 		docker search "${NEXUS_REPOSITORY}/t*" --format "{{.Name}}"
 		;;
 
+	base-push)
+		docker pull "${BASE_IMG_NAME}"
+		docker tag "${BASE_IMG_NAME}" "${NEXUS_REPOSITORY}/${BASE_IMG_NAME}"
+		docker image push "${NEXUS_REPOSITORY}/${BASE_IMG_NAME}"
+		;;
+
 	login)
 		echo -n "${NEXUS_PASSWORD}" | docker login --username "${NEXUS_USER}" --password-stdin "${NEXUS_REPOSITORY}"
 		;;
@@ -172,7 +182,7 @@ case "${cmd}" in
 	qt-win)
 		rm "${QT_WIN_ZIP}"
 		cd ~/lib/QtWin || exit 1
-		zip --display-bytes --recurse-paths --symlinks "${QT_WIN_ZIP}" 6.6.1/mingw_64/{bin,lib,include,libexec,mkspecs} -x "*.exe"
+		zip --display-bytes --recurse-paths --symlinks "${QT_WIN_ZIP}" 6.6.1/mingw_64/{bin,lib,include,libexec,mkspecs,plugins} -x "*.exe"
 		ls -lah "${QT_WIN_ZIP}"
 		;;
 
@@ -234,7 +244,8 @@ case "${cmd}" in
 		fi
 		# Build the image.
 		docker build \
-			--build-arg NEXUS_USER_ID="$(id -u)" \
+			--build-arg "BASE_IMG=${NEXUS_REPOSITORY}/${BASE_IMG_NAME}" \
+			--build-arg "NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${RAW_LIB_OFFSET}" \
 			--file "${DOCKER_FILE}" \
 			--tag "${IMG_NAME}" \
 			--network host \

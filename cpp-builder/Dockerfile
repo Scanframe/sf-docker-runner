@@ -1,4 +1,6 @@
-FROM ubuntu:22.04
+# Base image must be given from the build command line.
+ARG BASE_IMG
+FROM ${BASE_IMG}
 
 MAINTAINER "Arjan van Olphen <arjan@scanframe.nl"
 LABEL Description="C++/Qt project build container with support for Windows cross compile." Version="0.1"
@@ -37,10 +39,14 @@ SHELL ["/bin/bash", "-c"]
 # Also used to put the build context into.
 WORKDIR "/home/user"
 
+# Use the argument to pass the library URL.
+ARG NEXUS_RAW_LIB_URL
 # Get the compressed Qt library.
-RUN wget "https://nexus.scanframe.com/repository/shared/library/qt-lnx.zip" -O "qt-lnx.zip"
+#RUN wget "${NEXUS_RAW_LIB_URL}/qt-lnx.zip" -O "qt-lnx.zip"
+ADD "${NEXUS_RAW_LIB_URL}/qt-lnx.zip" "qt-lnx.zip"
 # Get the compressed QtWin library.
-RUN wget "https://nexus.scanframe.com/repository/shared/library/qt-win.zip" -O "qt-win.zip"
+#RUN wget "${NEXUS_RAW_LIB_URL}/qt-win.zip" -O "qt-win.zip"
+ADD "${NEXUS_RAW_LIB_URL}/qt-win.zip" "qt-win.zip"
 
 ENV USER_ID 9001
 ENV GROUP_ID 9001

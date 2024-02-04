@@ -12,14 +12,15 @@ fi
 
 # If option '--user' has not been passed switch
 if [[ "$(id -u)" -eq 0 ]]; then
-	# When the LOCAL user id and group are not given try taking them from the mounted project directory.
-	if [[ -z "${LOCAL_USER}" && -d /mnt/project ]]; then
-		LOCAL_USER="$(stat /mnt/project --format='%u:%g')"
-		#echo "Using owner of mount '/mnt/project' to match 'uid:gid' to '${LOCAL_USER}'."
-	else
-		# When local user was not passed use the the defaults.
-		LOCAL_USER="${LOCAL_USER:-9001:9001}"
-		#echo "Using env var 'LOCAL_USER' to set 'uid:gid' to '${LOCAL_USER}'."
+	# When the LOCAL user id and group are not given.
+	if [[ -z "${LOCAL_USER}" ]]; then
+		# Try taking them from the mounted project directory if it exists.
+		if [[ -d /mnt/project ]]; then
+			LOCAL_USER="$(stat /mnt/project --format='%u:%g')"
+		# Taking them from the home directory.
+		else
+			LOCAL_USER="$(stat "${HOME}" --format='%u:%g')"
+		fi
 	fi
 	usermod -u "$(echo "${LOCAL_USER}" | cut -d: -f1)" user || exit 1
 	groupmod -g "$(echo "${LOCAL_USER}" | cut -d: -f2)" user || exit 1
@@ -47,8 +48,23 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			fi
 		fi
 	fi
-
-
+	# Check if the QtWin library is available.
+	if [[ -d "/usr/local/lib/QtWin" ]]; then
+		echo "QtWin library is available."
+		mkdir --parents "${HOME}/lib"
+		ln -s "/usr/local/lib/QtWin" "${HOME}/lib/QtWin"
+	else
+		QT_LNX_ZIP="${HOME}/qt-win.zip"
+		if [[ -f "${QT_LNX_ZIP}" ]]; then
+			mkdir --parents "${HOME}/lib/QtWin"
+			if ! fuse-zip -o ro,nonempty,allow_other "${QT_LNX_ZIP}" "${HOME}/lib/QtWin"; then
+				echo "Mounting QtWin library zip-file '${QT_LNX_ZIP}' onto '${HOME}/lib/QtWin' failed!"
+				exit 1
+			else
+				echo "Qt library is mounted..."
+			fi
+		fi
+	fi
 	# Execute CMD passed by the user when starting the image.
 	if [[ $# -ne 0 ]]; then
 		sudo --user=user -- "${@}"
