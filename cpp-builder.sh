@@ -92,7 +92,11 @@ while true; do
 			;;
 
 		-p | --project)
-			PROJECT_DIR="${2}"
+			if [[ ! -d "${2}" ]]; then
+				echo "Project directory '${2}' does not exist!"
+				exit 1
+			fi
+			PROJECT_DIR="$(realpath "${2}")"
 			shift 2
 			continue
 			;;
@@ -266,13 +270,14 @@ case "${cmd}" in
 			--rm \
 			--interactive \
 			--tty \
-			--name="${CONTAINER_NAME}" \
+			--privileged \
 			--net=host \
+			--name="${CONTAINER_NAME}" \
 			--env LOCAL_USER="$(id -u):$(id -g)" \
 			--env DISPLAY \
 			--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro" \
 			--volume "${PROJECT_DIR}:/mnt/project:rw" \
-			--privileged \
+			--workdir "/mnt/project/" \
 			"${IMG_NAME}" "${@}"
 		;;
 

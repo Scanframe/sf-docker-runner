@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
 
-# Check if the entrypoint was called by root.
-if [[ "$(id -u)" -ne 0 ]]; then
-	echo "User(${HOME}): $(id -u) $(stat "${HOME}" --format='%u:%g') > '${*}'"
-	echo "Entrypoint not running as root which is required!
-When using CLion replace the Docker arguments in the configuration with:
-	 --rm --privileged --env LOCAL_USER=\"$(ig -u):$(ig -u)\"
-"
-	exit 1
+# Report the current command to stderr
+if [[ $# -ne 0 ]]; then
+	echo "Command:" "${@}" 1>&2
 fi
 
-# If option '--user' has not been passed switch
+# Check if root is executing the entrypoint.
 if [[ "$(id -u)" -eq 0 ]]; then
 	# When the LOCAL user id and group are not given.
 	if [[ -z "${LOCAL_USER}" ]]; then
@@ -33,7 +28,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	ln -s /mnt/project ~/project
 	# Check if the Qt library is available.
 	if [[ -d "/usr/local/lib/Qt" ]]; then
-		echo "Qt library is available."
+		echo "Qt zipped library is available."
 		mkdir --parents "${HOME}/lib"
 		ln -s "/usr/local/lib/Qt" "${HOME}/lib/Qt"
 	else
@@ -44,7 +39,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 				echo "Mounting Qt library zip-file '${QT_LNX_ZIP}' onto '${HOME}/lib/Qt' failed!"
 				exit 1
 			else
-				echo "Qt library is mounted..."
+				echo "Qt zipped library is mounted on '${HOME}/lib/Qt'." 1>&2
 			fi
 		fi
 	fi
@@ -61,20 +56,29 @@ if [[ "$(id -u)" -eq 0 ]]; then
 				echo "Mounting QtWin library zip-file '${QT_LNX_ZIP}' onto '${HOME}/lib/QtWin' failed!"
 				exit 1
 			else
-				echo "Qt library is mounted..."
+				echo "QtWin zipped library is mounted on '${HOME}/lib/QtWin'." 1>&2
 			fi
 		fi
 	fi
+	echo "Working directory: $(pwd)" 1>&2
 	# Execute CMD passed by the user when starting the image.
 	if [[ $# -ne 0 ]]; then
-		sudo --user=user -- "${@}"
+		# Hack to set LD_LIBRARY_PATH when needed.
+		EXEC_SCRIPT="$(realpath "$(dirname "${1}")/../lnx-exec.sh")"
+		if [[ -f "${EXEC_SCRIPT}" ]]; then
+			echo "Using execution script '${EXEC_SCRIPT}'." 1>&2
+			sudo --user=user --chdir="$(pwd)" -- "${EXEC_SCRIPT}" "${@}"
+		else
+			sudo --user=user --chdir="$(pwd)" -- "${@}"
+		fi
 	else
-		sudo --user=user --login
+		sudo --user=user --chdir="$(pwd)" --login
 	fi
-# Check if arguments are passed.
-elif [[ $# -ne 0 ]]; then
-	/bin/bash --login -c "$*"
-# When no arguments are passed.
 else
-	/bin/bash --login
+	echo "User(${HOME}): $(id -u) $(stat "${HOME}" --format='%u:%g') > '${*}'"
+	echo "Entrypoint not running as root which is required!
+	When using CLion replace the Docker arguments in the configuration with:
+		 --rm --privileged --env LOCAL_USER=\"$(ig -u):$(ig -u)\"
+	"
+	exit 1
 fi

@@ -39,15 +39,6 @@ SHELL ["/bin/bash", "-c"]
 # Also used to put the build context into.
 WORKDIR "/home/user"
 
-# Use the argument to pass the library URL.
-ARG NEXUS_RAW_LIB_URL
-# Get the compressed Qt library.
-#RUN wget "${NEXUS_RAW_LIB_URL}/qt-lnx.zip" -O "qt-lnx.zip"
-ADD "${NEXUS_RAW_LIB_URL}/qt-lnx.zip" "qt-lnx.zip"
-# Get the compressed QtWin library.
-#RUN wget "${NEXUS_RAW_LIB_URL}/qt-win.zip" -O "qt-win.zip"
-ADD "${NEXUS_RAW_LIB_URL}/qt-win.zip" "qt-win.zip"
-
 ENV USER_ID 9001
 ENV GROUP_ID 9001
 
@@ -59,6 +50,13 @@ RUN chown -R user:user "${HOME}"
 RUN echo 'user:user' | chpasswd
 # Creating file '/etc/sudoers.d/wine-user' to allow sudo without password.
 RUN bash -c 'echo "user ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/plain-user'
+
+RUN printf "\
+# Modify the defaults for the members of User_Alias USERLIST\n\
+Defaults:USERLIST runcwd=*\n\
+# User alias specification\n\
+User_Alias USERLIST = user\n\
+" > /etc/sudoers.d/chdir-allowed
 
 # Create '.profile' file in the home directory.
 RUN sudo -u user -- printf "\
@@ -90,6 +88,15 @@ RUN sed -i -e 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
 
 # Make sure the user inside the docker container has the same ID as the user outside
 COPY --chown="user:user" --chmod=755 bin/*.sh "${HOME}/bin/"
+
+# Use the argument to pass the library URL.
+ARG NEXUS_RAW_LIB_URL
+# Get the compressed Qt library.
+#RUN wget "${NEXUS_RAW_LIB_URL}/qt-lnx.zip" -O "qt-lnx.zip"
+ADD "${NEXUS_RAW_LIB_URL}/qt-lnx.zip" "qt-lnx.zip"
+# Get the compressed QtWin library.
+#RUN wget "${NEXUS_RAW_LIB_URL}/qt-win.zip" -O "qt-win.zip"
+ADD "${NEXUS_RAW_LIB_URL}/qt-win.zip" "qt-win.zip"
 
 # Create the entry point.
 RUN chmod 755 "${HOME}/bin/entrypoint.sh"
