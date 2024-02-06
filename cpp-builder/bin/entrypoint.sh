@@ -24,8 +24,8 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	# Change the owner of 'user' home directory and all in the 'bin' directory.
 	chown user:user ~user
 	chown user:user -R ~user/bin
-	# Add symlink to project mount.
-	ln -s /mnt/project ~/project
+	# Add symlink to project mount when it exists.
+	[[ -d /mnt/project ]] && ln -s /mnt/project ~/project
 	# Check if the Qt library is available.
 	if [[ -d "/usr/local/lib/Qt" ]]; then
 		echo "Qt zipped library is available."
