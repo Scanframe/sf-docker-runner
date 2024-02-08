@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+echo "[$#] $*"
+
 # Get the script directory.
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
 
@@ -15,12 +17,16 @@ function ShowHelp {
   Options:
     -h, --help  : Show this help.
     -t, --token : GitLab runner registration token.
+    --terminal  : Runs the script in a terminal xterm.
+    --pause     : Wait
 
   Commands/Steps:
     General:
       register: Register the GitLab runner (use token option).
-      run     : Run the runner interactively.
+      run     : Run the runner interactively with debug log-level.
       start   : Run the runner in the background.
+      list    : GitLab-runner list command.
+      status  : GitLab-runner status command.
       attach  : Attach to a console of the Docker container.
       stop    : Stops a background running runner.
       kill    : Kills a background running runner.
@@ -28,7 +34,7 @@ function ShowHelp {
 }
 
 # When no arguments or options are given show the help.
-if [[ $# -eq 0 ]]; then
+if [[ $# -eq 0 || $# -eq 1 && "$1" == "--" ]]; then
 	ShowHelp
 	exit 1
 fi
@@ -49,8 +55,12 @@ HOSTNAME="gitlab-runner"
 # Change to the current script directory.
 cd "${SCRIPT_DIR}" || exit 1
 
+# Store the first argument for comparison.
+FIRST_ARG="$1"
+PAUSE_FLAG=false
+
 # Parse options.
-TEMP=$(getopt -o 'ht:' --long 'help,token:' -n "$(basename "${0}")" -- "$@")
+TEMP=$(getopt -o 'ht:' --long 'help,token:,terminal,pause' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	ShowHelp
@@ -60,10 +70,26 @@ fi
 eval set -- "$TEMP"
 unset TEMP
 while true; do
-	case "$1" in
+	case "${1}" in
 
 		-h | --help)
 			ShowHelp
+			exit 0
+			;;
+
+		--pause)
+			PAUSE_FLAG=true
+			shift
+			;;
+
+		--terminal)
+			if [[ "${1}" != "${FIRST_ARG}" ]]; then
+				echo "Option '${1}' must be the first argument!"
+				exit 1
+			fi
+			shift
+			set -x
+			xterm -T "GitLab Runner" -geometry 120x25 +ai -bg black -fg white -sl 3000 -fs 10 -fa 'Noto Mono' -e "$0" "$@"
 			exit 0
 			;;
 
@@ -112,8 +138,8 @@ case "${cmd}" in
 			"${IMG_NAME}" register \
 			--url "${URL_GITLAB}" \
 			--token "${REG_TOKEN}" \
-			--executor "docker" \
-			;;
+			--executor "docker"
+		;;
 
 	run)
 		# Stop all containers using this image.
@@ -130,7 +156,7 @@ case "${cmd}" in
 			--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
 			--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
 			--hostname "${HOSTNAME}" \
-			"${IMG_NAME}"
+			"${IMG_NAME}" --log-level debug run
 		;;
 
 	start)
@@ -148,7 +174,7 @@ case "${cmd}" in
 			--volume "${CONFIG_DIR}:/etc/gitlab-runner:rw" \
 			--volume "/var/run/docker.sock:/var/run/docker.sock:rw" \
 			--hostname "${HOSTNAME}" \
-			"${IMG_NAME}"
+			"${IMG_NAME}" start
 		;;
 
 	attach)
@@ -168,7 +194,7 @@ case "${cmd}" in
 		fi
 		;;
 
-	status | list)
+	status | list | help)
 		docker run --rm --tty --interactive \
 			--name "${CONTAINER_NAME}" \
 			--user "0:$(id -g)" \
@@ -185,3 +211,7 @@ case "${cmd}" in
 		;;
 
 esac
+
+if $PAUSE_FLAG; then
+	read -n1 -r -p 'Press any key to continue...'
+fi

@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 
+function WriteLog
+{
+	echo "${@}" 1>&2
+}
+
 # Report the current command to stderr
-if [[ $# -ne 0 ]]; then
-	echo "Command:" "${@}" 1>&2
-fi
+WriteLog "Entrypoint:" "${@}"
 
 # Check if root is executing the entrypoint.
 if [[ "$(id -u)" -eq 0 ]]; then
@@ -28,7 +31,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	[[ -d /mnt/project ]] && ln -s /mnt/project ~/project
 	# Check if the Qt library is available.
 	if [[ -d "/usr/local/lib/Qt" ]]; then
-		echo "Qt zipped library is available."
+		WriteLog "Qt zipped library is available."
 		mkdir --parents "${HOME}/lib"
 		ln -s "/usr/local/lib/Qt" "${HOME}/lib/Qt"
 	else
@@ -36,16 +39,16 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		if [[ -f "${QT_LNX_ZIP}" ]]; then
 			mkdir --parents "${HOME}/lib/Qt"
 			if ! fuse-zip -o ro,nonempty,allow_other "${QT_LNX_ZIP}" "${HOME}/lib/Qt"; then
-				echo "Mounting Qt library zip-file '${QT_LNX_ZIP}' onto '${HOME}/lib/Qt' failed!"
+				WriteLog "Mounting Qt library zip-file '${QT_LNX_ZIP}' onto '${HOME}/lib/Qt' failed!"
 				exit 1
 			else
-				echo "Qt zipped library is mounted on '${HOME}/lib/Qt'." 1>&2
+				WriteLog "Qt zipped library is mounted on '${HOME}/lib/Qt'."
 			fi
 		fi
 	fi
 	# Check if the QtWin library is available.
 	if [[ -d "/usr/local/lib/QtWin" ]]; then
-		echo "QtWin library is available."
+		WriteLog "QtWin library is available."
 		mkdir --parents "${HOME}/lib"
 		ln -s "/usr/local/lib/QtWin" "${HOME}/lib/QtWin"
 	else
@@ -53,20 +56,20 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		if [[ -f "${QT_LNX_ZIP}" ]]; then
 			mkdir --parents "${HOME}/lib/QtWin"
 			if ! fuse-zip -o ro,nonempty,allow_other "${QT_LNX_ZIP}" "${HOME}/lib/QtWin"; then
-				echo "Mounting QtWin library zip-file '${QT_LNX_ZIP}' onto '${HOME}/lib/QtWin' failed!"
+				WriteLog "Mounting QtWin library zip-file '${QT_LNX_ZIP}' onto '${HOME}/lib/QtWin' failed!"
 				exit 1
 			else
-				echo "QtWin zipped library is mounted on '${HOME}/lib/QtWin'." 1>&2
+				WriteLog "QtWin zipped library is mounted on '${HOME}/lib/QtWin'."
 			fi
 		fi
 	fi
-	echo "Working directory: $(pwd)" 1>&2
+	WriteLog "Working directory: $(pwd)"
 	# Execute CMD passed by the user when starting the image.
 	if [[ $# -ne 0 ]]; then
 		# Hack to set LD_LIBRARY_PATH when needed.
 		EXEC_SCRIPT="$(realpath "$(dirname "${1}")/../lnx-exec.sh")"
 		if [[ -f "${EXEC_SCRIPT}" ]]; then
-			echo "Using execution script '${EXEC_SCRIPT}'." 1>&2
+			WriteLog "Using execution script '${EXEC_SCRIPT}'."
 			sudo --user=user --chdir="$(pwd)" -- "${EXEC_SCRIPT}" "${@}"
 		else
 			sudo --user=user --chdir="$(pwd)" -- "${@}"
@@ -75,7 +78,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		sudo --user=user --chdir="$(pwd)" --login
 	fi
 else
-	echo "User(${HOME}): $(id -u) $(stat "${HOME}" --format='%u:%g') > '${*}'"
+	WriteLog "User(${HOME}): $(id -u) $(stat "${HOME}" --format='%u:%g') > '${*}'"
 	echo "Entrypoint not running as root which is required!
 	When using CLion replace the Docker arguments in the configuration with:
 		 --rm --privileged --env LOCAL_USER=\"$(ig -u):$(ig -u)\"
