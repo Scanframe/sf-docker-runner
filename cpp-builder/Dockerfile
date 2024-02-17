@@ -16,7 +16,7 @@ ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && apt-get --yes upgrade
 
 # Install the packages needed for adding other package repositories.
-RUN apt --yes install wget gpg lsb-release software-properties-common
+RUN apt --yes install wget curl gpg lsb-release software-properties-common
 
 # Add the KitWare package repository for cmake to get the lastest version.
 RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
