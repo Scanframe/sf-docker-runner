@@ -3,7 +3,7 @@ ARG BASE_IMG
 FROM ${BASE_IMG}
 
 MAINTAINER "Arjan van Olphen <arjan@scanframe.nl"
-LABEL Description="C++/Qt project build container with support for Windows cross compile." Version="0.1"
+LABEL Description="C++/Qt project build container with support for Windows cross compile." Version="0.3"
 
 ## Let apt-get know we are running in noninteractive mode
 ENV DEBIAN_FRONTEND noninteractive
@@ -12,28 +12,46 @@ ENV DEBIAN_FRONTEND noninteractive
 #RUN sed -i -e 's/http:\/\/archive\.ubuntu\.com\/ubuntu\//mirror:\/\/mirrors\.ubuntu\.com\/mirrors\.txt/' /etc/apt/sources.list
 #RUN sed -i -e 's/http:\/\/archive\.ubuntu\.com\/ubuntu\//http:\/\/nl.archive.ubuntu.com\/ubuntu\//' /etc/apt/sources.list
 
+## Make sure image is up-to-date
+#RUN apt-get update && apt-get --yes upgrade
+#
+## Install the packages needed for adding other package repositories.
+#RUN apt --yes install wget curl gpg lsb-release software-properties-common
+#
+## Add the LVM tool chain as apt repository for the latest version.
+#RUN wget https://apt.llvm.org/llvm-snapshot.gpg.key -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
+#    echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc) main" > /etc/apt/sources.list.d/llvm-toolchain.list
+#
+## Add the KitWare package repository for cmake to get the lastest version.
+#RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
+#    apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
+#
+## Install all packages needed for all the tools.
+#RUN apt-get --yes install locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb clang-format \
+#    bindfs fuse-zip exif doxygen graphviz dialog jq recode default-jre-headless joe mc colordiff dos2unix
+#
+## Install needed libraries for building/compiling and packaging.
+#RUN apt-get --yes install libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev \
+#    strace exiftool rpm
+#
+## Install needed libraries for running a Qt GUI application.
+#RUN apt-get --yes install x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
+
+
 # Make sure image is up-to-date
-RUN apt-get update && apt-get --yes upgrade
-
-# Install the packages needed for adding other package repositories.
-RUN apt --yes install wget curl gpg lsb-release software-properties-common
-
-# Add the KitWare package repository for cmake to get the lastest version.
-RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
-    apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
-
-# Install all packages needed.
-RUN apt-get --yes install locales sudo git make cmake ninja-build \
-    gcc g++ g++-mingw-w64-x86-64 gdb bindfs fuse-zip \
-    exif doxygen graphviz dialog jq recode default-jre-headless \
-    joe mc
-
-# Install needed libraries for building/compiling and packaging.
-RUN apt-get --yes install libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev \
-    strace exiftool rpm
-
-# Install needed libraries for running a Qt GUI application.
-RUN apt-get --yes install x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
+RUN \
+    apt-get update && apt-get --yes upgrade && \
+    apt --yes install wget curl gpg lsb-release software-properties-common && \
+    wget https://apt.llvm.org/llvm-snapshot.gpg.key -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
+    echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc) main" > /etc/apt/sources.list.d/llvm-toolchain.list && \
+    wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
+    apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" && \
+    apt-get --yes install \
+    locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb clang-format \
+    bindfs fuse-zip exif doxygen graphviz dialog jq recode default-jre-headless joe mc colordiff dos2unix \
+    libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev strace exiftool rpm \
+    x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 && \
+    apt-get --yes autoremove && apt-get --yes clean
 
 # Qt requires locale UTF8.
 RUN echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen

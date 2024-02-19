@@ -41,6 +41,7 @@ function ShowHelp {
     kill      : Kills the container named 'gnu-cpp' running in the background.
     status    : Return the status of named 'gnu-cpp' the container running in the background.
     attach    : Attaches to the  in the background running container named 'gnu-cpp'.
+    versions  : Shows versions of most installed applications within the container.
 "
 }
 
@@ -60,7 +61,7 @@ source "${SCRIPT_DIR}/.nexus-credentials"
 # Offset of the Nexus server URL to the zipped libraries.
 RAW_LIB_OFFSET="repository/shared/library"
 # Location of the project files when externally provided.
-PROJECT_DIR="$(realpath "${SCRIPT_DIR}")"
+PROJECT_DIR="$(realpath "${SCRIPT_DIR}")/project"
 # Get the work directory.
 WORK_DIR="$(realpath "${SCRIPT_DIR}")/cpp-builder"
 # The absolute docker file location.
@@ -258,23 +259,27 @@ case "${cmd}" in
 		docker tag "${IMG_NAME}" "${NEXUS_REPOSITORY}/${IMG_NAME}"
 		;;
 
+	versions)
+		# Just reenter the script using the the correct arguments.
+		"${0}" run -- /bin/bash -c "\${HOME}/bin/versions.sh"
+		;;
+
 	run)
 		if [[ -z "${PROJECT_DIR}" ]]; then
 			echo "Project (option: -p) is required for this command."
 			exit 1
 		fi
-		#--device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
-		#--volume "$(realpath "${HOME}/lib/Qt/"):/usr/local/lib/Qt:ro" \
-		#--volume "$(realpath "${HOME}/lib/QtWin/"):/usr/local/lib/QtWin:ro" \
+		# Use option '--privileged' instead of '--device' and '--security-opt' when having fuse mounting problems.
 		docker run \
 			--rm \
 			--interactive \
 			--tty \
-			--privileged \
+			--device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
 			--net=host \
 			--name="${CONTAINER_NAME}" \
 			--env LOCAL_USER="$(id -u):$(id -g)" \
 			--env DISPLAY \
+			--env DEBUG=1 \
 			--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro" \
 			--volume "${PROJECT_DIR}:/mnt/project:rw" \
 			--workdir "/mnt/project/" \

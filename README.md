@@ -18,10 +18,12 @@ A script [`gitlab-runner.sh`](gitlab-runner.sh "Link to the script.") is provide
 To build C++ projects using a Docker image the next Docker configuration is used
 [`Dockerfile`](cpp-builder%2FDockerfile "Link to the docker file.").
 Applications within the Docker image to C++ projects are:
-* CMake
+* CMake 
 * CTest
+* CPack
 * Doxygen
-* Qt library (Linux & Windows using a cross-compiler)
+* CLang-Format v19  
+* Qt v6.5.1 library (Linux & Windows using a cross-compiler)
 
 To create the image and upload it to the Sonatype Nexus server the script [cpp-builder.sh](cpp-builder.sh) 
 is created to handle it. 

@@ -6,7 +6,7 @@ function WriteLog
 }
 
 # Report the current command to stderr
-WriteLog "Entrypoint:" "${@}"
+[[ -n "${DEBUG}" ]] && WriteLog "Entrypoint:" "${@}"
 
 # Check if root is executing the entrypoint.
 if [[ "$(id -u)" -eq 0 ]]; then
@@ -31,7 +31,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	[[ -d /mnt/project ]] && ln -s /mnt/project ~/project
 	# Check if the Qt library is available.
 	if [[ -d "/usr/local/lib/Qt" ]]; then
-		WriteLog "Qt zipped library is available."
+		[[ -n "${DEBUG}" ]] && WriteLog "Qt zipped library is available."
 		mkdir --parents "${HOME}/lib"
 		ln -s "/usr/local/lib/Qt" "${HOME}/lib/Qt"
 	else
@@ -42,7 +42,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 				WriteLog "Mounting Qt library zip-file '${QT_LNX_ZIP}' onto '${HOME}/lib/Qt' failed!"
 				exit 1
 			else
-				WriteLog "Qt zipped library is mounted on '${HOME}/lib/Qt'."
+				[[ -n "${DEBUG}" ]] && WriteLog "Qt zipped library is mounted on '${HOME}/lib/Qt'."
 			fi
 		fi
 	fi
@@ -59,11 +59,11 @@ if [[ "$(id -u)" -eq 0 ]]; then
 				WriteLog "Mounting QtWin library zip-file '${QT_LNX_ZIP}' onto '${HOME}/lib/QtWin' failed!"
 				exit 1
 			else
-				WriteLog "QtWin zipped library is mounted on '${HOME}/lib/QtWin'."
+				[[ -n "${DEBUG}" ]] && WriteLog "QtWin zipped library is mounted on '${HOME}/lib/QtWin'."
 			fi
 		fi
 	fi
-	WriteLog "Working directory: $(pwd)"
+	[[ -n "${DEBUG}" ]] && WriteLog "Working directory: $(pwd)"
 	# Execute CMD passed by the user when starting the image.
 	if [[ $# -ne 0 ]]; then
 		# Hack to set LD_LIBRARY_PATH when needed.
