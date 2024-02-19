@@ -28,6 +28,7 @@ function ShowHelp {
     build     : Builds the docker image tagged 'gnu-cpp:dev' for self hosted Nexus repository and requires zipped Qt libraries.
     push      : Pushes the docker image to the self hosted Nexus repository.
     pull      : Pulls the docker image from the self hosted Nexus repository.
+    base-push : Pushes the base image '${BASE_IMG_NAME}' to the self hosted Nexus repository.
     info      : Show general docker information.
     prune     : Remove all Docker build cache.
     login     : Log Docker in on the Nexus repository.

@@ -49,7 +49,7 @@ RUN \
     apt-get --yes install \
     locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb clang-format \
     bindfs fuse-zip exif doxygen graphviz dialog jq recode default-jre-headless joe mc colordiff dos2unix \
-    libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev strace exiftool rpm \
+    libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev strace exiftool rpm nsis \
     x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 && \
     apt-get --yes autoremove && apt-get --yes clean
 
