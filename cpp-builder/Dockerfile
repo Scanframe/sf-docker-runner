@@ -53,6 +53,9 @@ RUN \
     x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 && \
     apt-get --yes autoremove && apt-get --yes clean
 
+# Install
+RUN apt-get --yes install wine64
+
 # Qt requires locale UTF8.
 RUN echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen
 ENV LANG en_US.UTF-8
