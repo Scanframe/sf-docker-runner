@@ -53,7 +53,7 @@ RUN \
     x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 && \
     apt-get --yes autoremove && apt-get --yes clean
 
-# Install
+# Install wine 64-bit only.
 RUN apt-get --yes install wine64
 
 # Qt requires locale UTF8.
@@ -87,6 +87,9 @@ Defaults:USERLIST runcwd=*\n\
 # User alias specification\n\
 User_Alias USERLIST = user\n\
 " > /etc/sudoers.d/chdir-allowed
+
+# Initialize wine for user 'user'.
+#RUN su user -c '/usr/bin/wineboot --init' && rm -rf /tmp/wine-*
 
 # Create '.profile' file in the home directory.
 RUN sudo -u user -- printf "\
