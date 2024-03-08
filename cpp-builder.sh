@@ -234,7 +234,8 @@ case "${cmd}" in
 		fi
 		# Build the image.
 		docker buildx build \
-			--build-arg NEXUS_USER_ID="$(id -u)" \
+			--build-arg "BASE_IMG=${NEXUS_REPOSITORY}/${BASE_IMG_NAME}" \
+			--build-arg "NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${RAW_LIB_OFFSET}" \
 			--file "${DOCKER_FILE}" \
 			--tag "${IMG_NAME}" \
 			--network host \
@@ -262,7 +263,7 @@ case "${cmd}" in
 
 	versions)
 		# Just reenter the script using the the correct arguments.
-		"${0}" run -- /bin/bash -c versions.sh
+		"${0}" run -- /bin/bash -c /home/user/bin/versions.sh
 		;;
 
 	run)
@@ -281,6 +282,7 @@ case "${cmd}" in
 			--env LOCAL_USER="$(id -u):$(id -g)" \
 			--env DISPLAY \
 			--env DEBUG=1 \
+			--volume "${SCRIPT_DIR}/cpp-builder/build-bin:/root/bin:ro" \
 			--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro" \
 			--volume "${PROJECT_DIR}:/mnt/project:rw" \
 			--workdir "/mnt/project/" \

@@ -24,6 +24,7 @@
 	echo -e "BindFS:$(bindfs --version | grep -o '[^ ]*$')"
 	echo -e "Fuse-ZIP:$(fuse-zip --version 2>&1 | head -n 1 | cut -d' ' -f3)"
 	echo -e "JQ:$(jq --version | cut -d'-' -f2)"
+	echo -e "Gcovr:$(gcovr --version | head -n 1 | grep -o '[^ ]*$')"
 	if command -v wine64 >/dev/null; then
 		echo -e "Wine:$(wine64 --version | sed 's/^wine-\(\S*\).*$/\1/')"
 	else
