@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 {
 	echo -e "Ubuntu:$(lsb_release --release --short)"
-	echo -e "GCC:$(gcc --version | head -n 1 | grep -o '[^ ]*$')"
-	echo -e "C++:$(g++ --version | head -n 1 | grep -o '[^ ]*$')"
-	echo -e "MinGW GCC:$(x86_64-linux-gnu-gcc --version | head -n 1 | grep -o '[^ ]*$')"
-	echo -e "MinGW C++:$(x86_64-linux-gnu-g++ --version | head -n 1 | grep -o '[^ ]*$')"
+
+	command -v gcc >/dev/null && echo -e "GCC:$(gcc --version | head -n 1 | grep -o '[^ ]*$')"
+	command -v g++ >/dev/null && echo -e "C++:$(g++ --version | head -n 1 | grep -o '[^ ]*$')"
+	command -v gcc-12 >/dev/null && echo -e "GCC:$(gcc-12 --version | head -n 1 | grep -o '[^ ]*$')"
+	command -v g++-12 >/dev/null && echo -e "C++:$(g++-12 --version | head -n 1 | grep -o '[^ ]*$')"
+	echo -e "MinGW GCC:$(x86_64-w64-mingw32-gcc-posix --version | head -n 1 | cut -d' ' -f3)"
+	echo -e "MinGW C++:$(x86_64-w64-mingw32-c++-posix --version | head -n 1 | cut -d' ' -f3)"
 	echo -e "CMake:$(cmake --version -q | head -n 1 | grep -o '[^ ]*$')"
 	#echo -e "CTest:$(ctest --version -q | head -n 1 | grep -o '[^ ]*$')"
 	#echo -e "CPack:$(cpack --version -q | head -n 1 | grep -o '[^ ]*$')"
