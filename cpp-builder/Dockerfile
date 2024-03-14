@@ -42,9 +42,9 @@ ENV DEBIAN_FRONTEND noninteractive
 RUN \
     apt-get update && apt-get --yes upgrade && \
     apt --yes install wget curl gpg lsb-release software-properties-common && \
-    wget https://apt.llvm.org/llvm-snapshot.gpg.key -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
-    echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc) main" > /etc/apt/sources.list.d/llvm-toolchain.list && \
-    wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
+    wget "https://apt.llvm.org/llvm-snapshot.gpg.key" -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
+    apt-add-repository --yes --no-update "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc) main" && \
+    wget -O - "https://apt.kitware.com/keys/kitware-archive-latest.asc" 2>/dev/null | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
     apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" && \
     apt-get --yes install \
     locales sudo git make cmake ninja-build gcc-12 g++-12 g++-mingw-w64-x86-64 gdb clang-format chrpath \
