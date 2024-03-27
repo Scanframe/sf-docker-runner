@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Exit at first error.
+set -e
+
 # Get the script directory.
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
 # Set the base image name of the FROM statement used.
@@ -169,10 +172,17 @@ case "${cmd}" in
 
 	qt-lnx)
 		LIB_DIR="${HOME}/lib"
+		QT_VER="$(basename "$(find "${LIB_DIR}/Qt/" -maxdepth 1 -type d -regex ".*\/[0-9]\\.[0-9]+\\.[0-9]+$" | sort --reverse --version-sort | head -n 1)")"
+		if [[ -z "${QT_VER}" ]]; then
+			echo "No Qt version directory found in '${LIB_DIR}/Qt/'."
+			exit 1
+		fi
+		# Remove the current zip file.
 		[[ -f "${QT_LNX_ZIP}" ]] && rm "${QT_LNX_ZIP}"
-		pushd "${LIB_DIR}/Qt" || exit 1
-		zip --display-bytes --recurse-paths --symlinks "${QT_LNX_ZIP}" 6.6.1/gcc_64/{bin,lib,include,libexec,mkspecs,plugins}
-		popd || exit 1
+		# Change directory in order for zip to store the correct path.
+		pushd "${LIB_DIR}/Qt"
+		zip --display-bytes --recurse-paths --symlinks "${QT_LNX_ZIP}" "${QT_VER}/gcc_64/"{bin,lib,include,libexec,mkspecs,plugins}
+		popd
 		ls -lah "${QT_LNX_ZIP}"
 		;;
 
@@ -186,9 +196,20 @@ case "${cmd}" in
 		;;
 
 	qt-win)
-		rm "${QT_WIN_ZIP}"
-		cd ~/lib/QtWin || exit 1
-		zip --display-bytes --recurse-paths --symlinks "${QT_WIN_ZIP}" 6.6.1/mingw_64/{bin,lib,include,libexec,mkspecs,plugins} -x "*.exe"
+		LIB_DIR="${HOME}/lib"
+		# Find the Linux Qt version since the Windows version is linked to Linux one with symlinks.
+		QT_VER="$(basename "$(find "${LIB_DIR}/Qt/" -maxdepth 1 -type d -regex ".*\/[0-9]\\.[0-9]+\\.[0-9]+$" | sort --reverse --version-sort | head -n 1)")"
+		if [[ -z "${QT_VER}" ]]; then
+			echo "No Qt version directory found in '${LIB_DIR}/Qt/'."
+			exit 1
+		fi
+		# Remove the current zip file.
+		[[ -f "${QT_WIN_ZIP}" ]] && rm "${QT_WIN_ZIP}"
+		# Change directory in order for zip to store the correct path.
+		pushd "${LIB_DIR}/QtWin"
+		# Zip all files except Windows executables.
+		zip --display-bytes --recurse-paths --symlinks "${QT_WIN_ZIP}" "${QT_VER}/mingw_64/"{bin,lib,include,libexec,mkspecs,plugins} -x '*.exe'
+		popd
 		ls -lah "${QT_WIN_ZIP}"
 		;;
 
