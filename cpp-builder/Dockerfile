@@ -42,6 +42,7 @@ ENV DEBIAN_FRONTEND noninteractive
 RUN \
     apt-get update && apt-get --yes upgrade && \
     apt --yes install wget curl gpg lsb-release software-properties-common && \
+    add-apt-repository --yes --no-update ppa:git-core/ppa && \
     wget --quiet "https://apt.llvm.org/llvm-snapshot.gpg.key" -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
     apt-add-repository --yes --no-update "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc) main" && \
     wget --quiet -O - "https://apt.kitware.com/keys/kitware-archive-latest.asc" | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \

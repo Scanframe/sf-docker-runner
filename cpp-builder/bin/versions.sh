@@ -2,6 +2,7 @@
 {
 	echo -e "Ubuntu:$(lsb_release --release --short)"
 
+	echo -e "Git:$(git --version | head -n 1 | grep -o '[^ ]*$')"
 	command -v gcc >/dev/null && echo -e "GCC:$(gcc --version | head -n 1 | grep -o '[^ ]*$')"
 	command -v g++ >/dev/null && echo -e "C++:$(g++ --version | head -n 1 | grep -o '[^ ]*$')"
 	command -v gcc-12 >/dev/null && echo -e "GCC:$(gcc-12 --version | head -n 1 | grep -o '[^ ]*$')"
@@ -33,4 +34,4 @@
 	else
 		echo -e "Wine:not-installed"
 	fi
-} | column --table --separator ':' --table-columns 'Part,Version'
+} | column --table --separator ':' --table-columns 'Application,Version'
