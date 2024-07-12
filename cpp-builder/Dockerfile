@@ -2,11 +2,13 @@
 ARG BASE_IMG
 FROM ${BASE_IMG}
 
-MAINTAINER "Arjan van Olphen <arjan@scanframe.nl"
-LABEL Description="C++/Qt project build container with support for Windows cross compile." Version="0.3"
+LABEL \
+	org.opencontainers.image.authors="Arjan van Olphen <arjan@scanframe.nl>"\
+	desc="C++/Qt project build container with support for Windows cross compile."\
+	version="0.3"
 
 ## Let apt-get know we are running in noninteractive mode
-ENV DEBIAN_FRONTEND noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Use a mirror list as mirror server.
 #RUN sed -i -e 's/http:\/\/archive\.ubuntu\.com\/ubuntu\//mirror:\/\/mirrors\.ubuntu\.com\/mirrors\.txt/' /etc/apt/sources.list
@@ -64,9 +66,9 @@ RUN /root/bin/gcovr-install.sh
 
 # Qt requires locale UTF8.
 RUN echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US:en
-ENV LC_ALL en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
 
 # Use '/bin/bash' instead of default '/bin/sh'.
 SHELL ["/bin/bash", "-c"]
@@ -75,12 +77,12 @@ SHELL ["/bin/bash", "-c"]
 # Also used to put the build context into.
 WORKDIR "/home/user"
 
-ENV USER_ID 9001
-ENV GROUP_ID 9001
+ENV USER_ID=9001
+ENV GROUP_ID=9001
 
 RUN addgroup --gid ${GROUP_ID} user
 RUN useradd --shell /bin/bash -u ${USER_ID} -g ${GROUP_ID} -o -c "" -m user
-ENV HOME "/home/user"
+ENV HOME="/home/user"
 RUN chown -R user:user "${HOME}"
 # Set user password to 'user'.
 RUN echo 'user:user' | chpasswd
