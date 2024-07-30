@@ -8,11 +8,11 @@ script_dir="$(cd "$(dirname "${0}")" && pwd)"
 # Set the base image name of the FROM statement used.
 base_img_name="ubuntu:22.04"
 # Set the image name to be used.
-img_name="gnu-cpp:dev"
+img_name="python:dev"
 # Set container name to be used.
-container_name="gnu-cpp"
-# Hostname for the docker container.
-hostname="cpp-builder"
+container_name="python"
+# Offset of the Nexus server URL to the zipped libraries.
+raw_lib_offset="repository/shared/library"
 
 # Prints the help.
 #
@@ -32,10 +32,6 @@ function ShowHelp {
     push      : Pushes the docker image to the self-hosted Nexus repository.
     pull      : Pulls the docker image from the self-hosted Nexus repository.
     base-push : Pushes the base image '${base_img_name}' to the self-hosted Nexus repository.
-    qt-lnx    : Generates the 'qt-win.zip' from the current users Linux Qt library.
-    qt-win    : Generates the qt-win-zip from the current users Windows Qt library.
-    qt-lnx-up : Uploads the generated zip-file to the Nexus server as 'repository/shared/library/qt-lnx.zip'.
-    qt-win-up : Uploads the generated zip-file to the Nexus server as 'repository/shared/library/qt-win.zip'.
     runx      : Runs the docker container named 'gnu-cpp' in the foreground mounting the passed project directory using the hosts X-server.
     run       : Same as 'runx' using a fake X-server.
     stop      : Stops the container named 'gnu-cpp' running in the background.
@@ -43,8 +39,6 @@ function ShowHelp {
     status    : Return the status of named 'gnu-cpp' the container running in the background.
     attach    : Attaches to the  in the background running container named 'gnu-cpp'.
     versions  : Shows versions of most installed applications within the container.
-    login     : Login on Docker Nexus repository.
-    logout    : Logout Docker from any repository.
 "
 }
 
@@ -61,18 +55,12 @@ if [[ ! -f "${script_dir}/.nexus-credentials" ]]; then
 fi
 # Read the credentials from non repository file.
 source "${script_dir}/.nexus-credentials"
-# Offset of the Nexus server URL to the zipped libraries.
-raw_lib_offset="repository/shared/library"
 # Location of the project files when externally provided.
 project_dir="$(realpath "${script_dir}")/project"
 # Get the work directory.
 work_dir="$(realpath "${script_dir}")/builder"
 # The absolute docker file location.
-docker_file="${work_dir}/cpp.Dockerfile"
-# Zip file containing thw Qt library.
-qt_lnx_zip="/tmp/qt-lnx.zip"
-# Zip file containing thw Qt library.
-qt_win_zip="/tmp/qt-win.zip"
+docker_file="${work_dir}/python.Dockerfile"
 
 # Change to the current script directory.
 cd "${script_dir}" || exit 1
@@ -126,62 +114,39 @@ fi
 
 case "${cmd}" in
 
+	info)
+		docker system df
+		;;
+
+	prune)
+		# Prune build cache.
+		docker buildx prune --all
+		;;
+
+	repo | repository)
+		curl -v \
+			-u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+			-X 'GET' \
+			-H 'accept: application/json' \
+			"${NEXUS_SERVER_URL}/service/rest/v1/repositories/docker/hosted/docker-image"
+		;;
+
+	list)
+		# docker image ls --all "*"
+		curl -v \
+			-u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+			-X 'GET' \
+			"${NEXUS_SERVER_URL}/service/rest/v1/search/assets?repository=docker-image&format=docker"
+		;;
+
+	search)
+		docker search "${NEXUS_REPOSITORY}/t*" --format "{{.Name}}"
+		;;
+
 	base-push)
 		docker pull "${base_img_name}"
 		docker tag "${base_img_name}" "${NEXUS_REPOSITORY}/${base_img_name}"
 		docker image push "${NEXUS_REPOSITORY}/${base_img_name}"
-		;;
-
-	qt-lnx)
-		lib_dir="${HOME}/lib"
-		qt_ver="$(basename "$(find "${lib_dir}/Qt/" -maxdepth 1 -type d -regex ".*\/[0-9]\\.[0-9]+\\.[0-9]+$" | sort --reverse --version-sort | head -n 1)")"
-		if [[ -z "${qt_ver}" ]]; then
-			echo "No Qt version directory found in '${lib_dir}/Qt/'."
-			exit 1
-		fi
-		# Remove the current zip file.
-		[[ -f "${qt_lnx_zip}" ]] && rm "${qt_lnx_zip}"
-		# Change directory in order for zip to store the correct path.
-		pushd "${lib_dir}/Qt"
-		zip --display-bytes --recurse-paths --symlinks "${qt_lnx_zip}" "${qt_ver}/gcc_64/"{bin,lib,include,libexec,mkspecs,plugins}
-		popd
-		ls -lah "${qt_lnx_zip}"
-		;;
-
-	qt-lnx-up)
-		# Upload file Linux Qt library.
-		curl \
-			--progress-bar \
-			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-			--upload-file "${qt_lnx_zip}" \
-			"${NEXUS_SERVER_URL}/repository/shared/library/qt-lnx.zip"
-		;;
-
-	qt-win)
-		lib_dir="${HOME}/lib"
-		# Find the Linux Qt version since the Windows version is linked to Linux one with symlinks.
-		qt_ver="$(basename "$(find "${lib_dir}/Qt/" -maxdepth 1 -type d -regex ".*\/[0-9]\\.[0-9]+\\.[0-9]+$" | sort --reverse --version-sort | head -n 1)")"
-		if [[ -z "${qt_ver}" ]]; then
-			echo "No Qt version directory found in '${lib_dir}/Qt/'."
-			exit 1
-		fi
-		# Remove the current zip file.
-		[[ -f "${qt_win_zip}" ]] && rm "${qt_win_zip}"
-		# Change directory in order for zip to store the correct path.
-		pushd "${lib_dir}/QtWin"
-		# Zip all files except Windows executables.
-		zip --display-bytes --recurse-paths --symlinks "${qt_win_zip}" "${qt_ver}/mingw_64/"{bin,lib,include,libexec,mkspecs,plugins} -x '*.exe'
-		popd
-		ls -lah "${qt_win_zip}"
-		;;
-
-	qt-win-up)
-		# Upload file Windows Qt library.
-		curl \
-			--progress-bar \
-			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-			--upload-file "${qt_win_zip}" \
-			"${NEXUS_SERVER_URL}/repository/shared/library/qt-win.zip"
 		;;
 
 	push)
@@ -255,9 +220,7 @@ case "${cmd}" in
 			--rm \
 			--interactive \
 			--tty \
-			--device /dev/fuse \
-			--cap-add SYS_ADMIN \
-			--security-opt apparmor:unconfined \
+			--device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
 			--net=host \
 			--name="${container_name}" \
 			--env LOCAL_USER="$(id -u):$(id -g)" \

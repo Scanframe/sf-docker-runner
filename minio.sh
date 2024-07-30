@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Get the script directory.
-SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
+script_dir="$(cd "$(dirname "${0}")" && pwd)"
 
 # Prints the help.
 #
@@ -38,21 +38,21 @@ if [[ $# -eq 0 ]]; then
 fi
 
 # Read the credentials from non repository file.
-source "${SCRIPT_DIR}/.minio-credentials"
+source "${script_dir}/.minio-credentials"
 
 # Change to the current script directory.
-cd "${SCRIPT_DIR}" || exit 1
+cd "${script_dir}" || exit 1
 
 # Parse options.
-TEMP=$(getopt -o 'h' --long 'help' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'h' --long 'help' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	ShowHelp
 	exit 1
 fi
 
-eval set -- "$TEMP"
-unset TEMP
+eval set -- "${temp}"
+unset temp
 while true; do
 	case "$1" in
 
@@ -81,121 +81,121 @@ if [[ $# -gt 0 ]]; then
 fi
 
 # Container name of the minio server.
-CONTAINER_NAME="minio-server"
+container_name="minio-server"
 # Container name of the minio control.
-CONTAINER_NAME_MC="minio-mc"
+container_name_mc="minio-mc"
 # Set the image name to be used.
-IMG_NAME="minio/minio:latest"
+img_name="minio/minio:latest"
 # Image name for the CLI.
-IMG_NAME_MC="minio/mc:latest"
+img_name_mc="minio/mc:latest"
 # Directory in the container where the data is stored.
-MOUNT_DIR="/data"
+mount_dir="/data"
 # Configuration directory inside the CLI container.
-MC_CFG_DIR="/tmp/mc"
+mc_cfg_dir="/tmp/mc"
 
 # Process subcommand.
 case "${cmd}" in
 	run)
 		# Stop all containers using this image.
 		# shellcheck disable=SC2046
-		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
-			echo "Stopping containers using image '${IMG_NAME}'."
-			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
+		if [[ -n "$(docker ps -a -q --filter ancestor="${img_name}")" ]]; then
+			echo "Stopping containers using image '${img_name}'."
+			docker stop $(docker ps -a -q --filter ancestor="${img_name}")
 		fi
 		# --net=host \
 		docker run \
 			--rm \
-			--name "${CONTAINER_NAME}" \
+			--name "${container_name}" \
 			--publish 9000:9000 \
 			--publish 9001:9001 \
 			--user "$(id -u):$(id -g)" \
-			--volume "${SCRIPT_DIR}/minio/data:${MOUNT_DIR}" \
+			--volume "${script_dir}/minio/data:${mount_dir}" \
 			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
 			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
-			"${IMG_NAME}" server "${MOUNT_DIR}" --console-address ":9001"
+			"${img_name}" server "${mount_dir}" --console-address ":9001"
 		;;
 
 	start)
 		# Stop all containers using this image.
 		# shellcheck disable=SC2046
-		if [[ -n "$(docker ps -a -q --filter ancestor="${IMG_NAME}")" ]]; then
-			echo "Stopping containers using image '${IMG_NAME}'."
-			docker stop $(docker ps -a -q --filter ancestor="${IMG_NAME}")
+		if [[ -n "$(docker ps -a -q --filter ancestor="${img_name}")" ]]; then
+			echo "Stopping containers using image '${img_name}'."
+			docker stop $(docker ps -a -q --filter ancestor="${img_name}")
 		fi
 		#	--net=host \
 		docker run \
 			--rm \
 			--detach \
-			--name "${CONTAINER_NAME}" \
+			--name "${container_name}" \
 			--publish 9000:9000 \
 			--publish 9001:9001 \
 			--user "$(id -u):$(id -g)" \
-			--volume "${SCRIPT_DIR}/minio/data:${MOUNT_DIR}" \
+			--volume "${script_dir}/minio/data:${mount_dir}" \
 			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
 			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
-			"${IMG_NAME}" server "${MOUNT_DIR}" --console-address ":9001"
+			"${img_name}" server "${mount_dir}" --console-address ":9001"
 		;;
 
 	stop | kill)
 		# Stop this docker container only.
-		cntr_id="$(docker ps --filter name="${CONTAINER_NAME}" --quiet)"
+		cntr_id="$(docker ps --filter name="${container_name}" --quiet)"
 		if [[ -n "${cntr_id}" ]]; then
 			echo "Container ID is '${cntr_id}' and performing '${cmd}' command."
 			docker "${cmd}" "${cntr_id}"
 		else
-			echo "Container '${CONTAINER_NAME}' is not running."
+			echo "Container '${container_name}' is not running."
 		fi
 		;;
 
 	bash)
 		docker run \
 			--rm \
-			--name "${CONTAINER_NAME_MC}" \
+			--name "${container_name_mc}" \
 			--interactive --tty \
 			--hostname="mino-ctl" \
 			--user "$(id -u):$(id -g)" \
-			--volume "${SCRIPT_DIR}/minio/bin/login.sh:/usr/local/bin/mc-login:ro" \
-			--volume "${SCRIPT_DIR}/minio/config:${MC_CFG_DIR}:rw" \
+			--volume "${script_dir}/minio/bin/login.sh:/usr/local/bin/mc-login:ro" \
+			--volume "${script_dir}/minio/config:${mc_cfg_dir}:rw" \
 			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
 			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
 			--env "MINIO_URL=${MINIO_URL}" \
-			--env "MC_CFG_DIR=${MC_CFG_DIR}" \
+			--env "mc_cfg_dir=${mc_cfg_dir}" \
 			--net=host \
 			--entrypoint="bash" \
-			"${IMG_NAME_MC}"
+			"${img_name_mc}"
 		;;
 
 	login)
 		docker run \
 			--rm \
-			--name "${CONTAINER_NAME_MC}" \
+			--name "${container_name_mc}" \
 			--interactive --tty \
 			--hostname="mino-ctl" \
 			--user "$(id -u):$(id -g)" \
-			--volume "${SCRIPT_DIR}/minio/bin/login.sh:/usr/local/bin/mc-login:ro" \
-			--volume "${SCRIPT_DIR}/minio/config:${MC_CFG_DIR}:rw" \
+			--volume "${script_dir}/minio/bin/login.sh:/usr/local/bin/mc-login:ro" \
+			--volume "${script_dir}/minio/config:${mc_cfg_dir}:rw" \
 			--env "MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}" \
 			--env "MINIO_SECRET_KEY=${MINIO_SECRET_KEY}" \
 			--env "MINIO_URL=${MINIO_URL}" \
-			--env "MC_CFG_DIR=${MC_CFG_DIR}" \
+			--env "mc_cfg_dir=${mc_cfg_dir}" \
 			--net=host \
 			--entrypoint="mc-login" \
-			"${IMG_NAME_MC}"
+			"${img_name_mc}"
 		;;
 
 	mc)
 		docker run \
 			--rm \
-			--name "${CONTAINER_NAME_MC}" \
+			--name "${container_name_mc}" \
 			--interactive --tty \
 			--hostname="mino-ctl" \
 			--user "$(id -u):$(id -g)" \
-			--volume "${SCRIPT_DIR}/minio/bin/entrypoint.sh:/usr/local/bin/mc-entrypoint:ro" \
-			--volume "${SCRIPT_DIR}/minio/config:${MC_CFG_DIR}:rw" \
-			--env "MC_CFG_DIR=${MC_CFG_DIR}" \
+			--volume "${script_dir}/minio/bin/entrypoint.sh:/usr/local/bin/mc-entrypoint:ro" \
+			--volume "${script_dir}/minio/config:${mc_cfg_dir}:rw" \
+			--env "mc_cfg_dir=${mc_cfg_dir}" \
 			--net=host \
 			--entrypoint="mc-entrypoint" \
-			"${IMG_NAME_MC}" "$@"
+			"${img_name_mc}" "$@"
 		;;
 
 	*)
