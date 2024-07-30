@@ -1,3 +1,5 @@
+/builder/apt-repo-gpg/*
+/builder/wine-reg/*
 .idea
 .nexus-credentials
 .minio-credentials

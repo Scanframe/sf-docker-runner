@@ -2,7 +2,7 @@
 #set -x
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Set the image name to be used.
-IMG_NAME="nexus.scanframe.com:8090/ubuntu:22.04"
+IMG_NAME="nexus.scanframe.com/ubuntu:22.04"
 # Name of the container to be used.
 CONTAINER_NAME="apt-repo"
 # Hostname for the docker container.

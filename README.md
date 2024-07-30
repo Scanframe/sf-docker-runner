@@ -28,6 +28,16 @@ Applications within the Docker image to C++ projects are:
 To create the image and upload it to the Sonatype Nexus server the script [cpp-builder.sh](cpp-builder.sh) 
 is created to handle it. 
 
+#### Building Executables from Python Code
+
+Command line examples for building executables of a Python project containing executable `*.py` files.
+
+```shell
+./cpp-builder.sh --project ../../pysrc/dev-tools run -- wine venv-setup.cmd mk-exec.cmd nexus-docker.py
+./cpp-builder.sh --project ../../pysrc/dev-tools run -- ./venv-setup.sh ./mk-exec.sh nexus-docker.py
+```
+
+
 ### 3) Enable GitLab Runner Cache using a MinIO Server 
 
 Set up MinIO server using a docker image named (`minio/minio:latest`) and for the controlling 
@@ -37,7 +47,7 @@ For easy usage and set up the script [minio.sh](minio.sh "Link to the script.") 
 ### 4) CLion Using Docker the Image  
 
 To have CLion compile CMake projects using Qt arguments passed to the Docker `run` command need to be 
-changed in order to have the original [entrypoint](cpp-builder/bin/entrypoint.sh) to execute the command.
+changed in order to have the original [entrypoint](builder/bin/entrypoint.sh) to execute the command.
 CLion Docker command-line arguments: `--rm --privileged --user 0:0 --env USER_LOCAL="<uid>:<gid>"`
 where **uid** and **gid** is the current users user and group id. 
 Debugging is not possible since the intermediate `entrypoint.sh` script prevents this.
