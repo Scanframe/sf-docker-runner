@@ -252,10 +252,10 @@ case "${cmd}" in
 		dckr_cmd+=(--net=host)
 		dckr_cmd+=(--name="${container_name}")
 		# Script home/user/bin/entrypoint.sh picks this up or uses the id' from the mounted project user.
-		dckr_cmd+=(--env LOCAL_USER="$(id -u):$(id -g)")
+		#dckr_cmd+=(--env LOCAL_USER="$(id -u):$(id -g)")
 		dckr_cmd+=(--user user:user)
 		dckr_cmd+=(--env DEBUG=1)
-		dckr_cmd+=(--volume "${work_dir}/bin:/usr/local/bin/test:ro")
+		#dckr_cmd+=(--volume "${work_dir}/bin:/usr/local/bin/test:ro")
 		if [[ "${cmd}" == "runx" ]]; then
 			dckr_cmd+=(--env DISPLAY)
 			dckr_cmd+=(--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro")

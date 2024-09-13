@@ -150,14 +150,8 @@ RUN (Xvfb :10 -screen 0 1024x768x24 &) && \
 # Copy the Windows registry files as a fix since no registry files are created during the build.
 RUN wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz" -O- | tar -C "${WINEPREFIX}" -xzf -
 
-## Add the python installer.
-ADD "${NEXUS_SERVER_URL}/repository/shared/application/windows/python-3.10.12-amd64.exe" "install-python.exe"
-RUN chmod +r "install-python.exe"
-# Use a different port for the fake X-server it collides with the previous one on ':10'.
-RUN (Xvfb :11 -screen 0 1024x768x24 &) && \
-    sudo --user=user mkdir "${WINEPREFIX}/drive_c/python" && \
-    sudo --user=user WINEPREFIX="${WINEPREFIX}" WINEDLLOVERRIDES="mscoree=d" DISPLAY=:11  \
-    wine install-python.exe /quiet Include_pip=1 PrependPath=1 TargetDir='C:\python'
+# Allow the initial user to run the sudo command.
+RUN usermod -aG sudo user
 
 # Create an 'import.reg' registry file for the 'entrypoint.sh' script to import since
 # somehow the Wine registry during a build does not work.

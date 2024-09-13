@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 
-# Bailout on first error.
-set -e
-
 function WriteLog {
 	echo "${@}" 1>&2
 }
 
 # Report the current command to stderr
-[[ -n "${DEBUG}" ]] && WriteLog "Entrypoint($(id -nu)/$(id -u)):" "${@}"
+[[ -n "${DEBUG}" ]] && WriteLog "Entrypoint($(id -u)):" "${@}"
 
 # Check if root is executing the entrypoint.
 if [[ "$(id -u)" -eq 0 ]]; then
@@ -28,7 +25,6 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	fi
 	usermod -u "$(echo "${LOCAL_USER}" | cut -d: -f1)" user || exit 1
 	groupmod -g "$(echo "${LOCAL_USER}" | cut -d: -f2)" user || exit 1
-	usermod -aG sudo user || exit 1
 	usermod -aG "${WINE_USER}" user || exit 1
 	# Change the owner of 'user' home directory and all in the 'bin' directory.
 	chown user:user ~user

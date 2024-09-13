@@ -4,7 +4,7 @@ FROM ${BASE_IMG}
 
 LABEL \
 	org.opencontainers.image.authors="Arjan van Olphen <arjan@scanframe.nl>"\
-	org.opencontainers.image.description="C++/Qt project build container with support for Windows cross compile."\
+	org.opencontainers.image.description="Python project executable build container also for Windows using Wine."\
 	org.opencontainers.image.version="0.4"
 
 ## Let apt-get know we are running in noninteractive mode
@@ -119,6 +119,9 @@ Windows Registry Editor Version 5.00\n\
 [HKEY_CURRENT_USER\Environment]\n\
 \"PATH\"=\"C:\\\\\\python;C:\\\\\\python\\\\\\Scripts\"\n\
 \n" > "${HOME}/import.reg" # && sudo --user=user WINEPREFIX="${WINEPREFIX}" wine regedit "${HOME}/import.reg"
+
+# Allow the initial user to run the sudo command.
+RUN usermod -aG sudo user
 
 # Make sure the user inside the docker container has the same ID as the user outside
 COPY --chown="user:user" --chmod=755 bin/*.sh "${HOME}/bin/"
