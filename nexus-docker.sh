@@ -26,11 +26,10 @@ function ShowHelp {
     du          : Show docker disk usage.
     local       : Docker client list local images.
     list        : List remote images on server.
-    login       : Log Docker in on the Nexus repository.
+    login       : Log Docker in on the self hosted Nexus registry repository.
+    docker-login: Log Docker in on docker.com registry.
     logout      : Log docker out from any repository.
     prune       : Remove all Docker build cache.
-    login       : Log Docker in on the Nexus repository.
-    logout      : Log docker out from any repository.
     remove      : Removes a local image. (not implemented)
     wine-reg    : Compress registry files from common/wine-reg.
     wine-reg-up : Upload compressed file to Nexus raw repository.
@@ -122,8 +121,13 @@ case "${cmd}" in
 		;;
 
 	login)
-		echo "Login Docker registry: ${NEXUS_REPOSITORY}"
+		echo "Login to private Nexus registry: ${NEXUS_REPOSITORY}"
 		echo -n "${NEXUS_PASSWORD}" | docker login --username "${NEXUS_USER}" --password-stdin "${NEXUS_REPOSITORY}"
+		;;
+
+	docker-login)
+		echo "Login to Docker.com registry"
+		echo -n "${DOCKER_PASSWORD}" | docker login --username "${DOCKER_USER}" --password-stdin
 		;;
 
 	logout)

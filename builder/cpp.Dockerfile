@@ -51,7 +51,7 @@ RUN apt-get update && apt-get --yes upgrade && \
     wget --quiet -O - "https://apt.kitware.com/keys/kitware-archive-latest.asc" | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
     apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" && \
     apt-get --yes install \
-    locales sudo git make cmake ninja-build gcc-12 g++-12 g++-mingw-w64-x86-64 gdb clang-format chrpath dpkg-dev \
+    locales sudo git make cmake ninja-build gcc-12 g++-12 g++-mingw-w64-x86-64 gdb valgrind clang-format chrpath dpkg-dev \
     bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix \
     libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev strace exiftool rpm nsis \
     x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 wine64 xvfb && \
@@ -131,9 +131,6 @@ alias l='ls $\LS_OPTIONS -CF'\n" > "${HOME}/.bashrc"
 # Allow fuse by others.
 RUN sed -i -e 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
 
-# Make sure the user inside the docker container has the same ID as the user outside
-COPY --chown="user:user" --chmod=755 bin/*.sh "${HOME}/bin/"
-
 # Use the arguments to pass the library URL.
 ARG NEXUS_SERVER_URL
 ARG NEXUS_RAW_LIB_URL
@@ -170,6 +167,9 @@ Windows Registry Editor Version 5.00\n\
 [HKEY_CURRENT_USER\Environment]\n\
 \"PATH\"=\"C:\\\\\\python;C:\\\\\\python\\\\\\Scripts\"\n\
 \n" > "${HOME}/import.reg" # && sudo --user=user WINEPREFIX="${WINEPREFIX}" wine regedit "${HOME}/import.reg"
+
+# Make sure the user inside the docker container has the same ID as the user outside
+COPY --chown="user:user" --chmod=755 bin/*.sh "${HOME}/bin/"
 
 # Create the entry point.
 RUN chmod 755 "${HOME}/bin/entrypoint.sh"

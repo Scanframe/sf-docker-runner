@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 {
-	echo -e "Ubuntu:$(lsb_release --release --short)"
-	echo -e "Git:$(git --version | head -n 1 | grep -o '[^ ]*$')"
+	command -v lsb_release >/dev/null && echo -e "$(lsb_release --id --short):$(lsb_release --release --short)"
+	command -v git >/dev/null && echo -e "Git:$(git --version | head -n 1 | grep -o '[^ ]*$')"
 	command -v gcc >/dev/null && echo -e "GCC:$(gcc --version | head -n 1 | grep -o '[^ ]*$')"
 	command -v g++ >/dev/null && echo -e "C++:$(g++ --version | head -n 1 | grep -o '[^ ]*$')"
 	command -v gcc-12 >/dev/null && echo -e "GCC:$(gcc-12 --version | head -n 1 | grep -o '[^ ]*$')"
@@ -9,8 +9,6 @@
 	command -v x86_64-w64-mingw32-gcc-posix >/dev/null && echo -e "MinGW GCC:$(x86_64-w64-mingw32-gcc-posix --version | head -n 1 | cut -d' ' -f3)"
 	command -v x86_64-w64-mingw32-c++-posix >/dev/null && echo -e "MinGW C++:$(x86_64-w64-mingw32-c++-posix --version | head -n 1 | cut -d' ' -f3)"
 	command -v cmake >/dev/null && echo -e "CMake:$(cmake --version -q | head -n 1 | grep -o '[^ ]*$')"
-	#command -v ctest && echo -e "CTest:$(ctest --version -q | head -n 1 | grep -o '[^ ]*$')"
-	#command -v cpack && echo -e "CPack:$(cpack --version -q | head -n 1 | grep -o '[^ ]*$')"
 	command -v make >/dev/null && echo -e "GNU-Make:$(make --version | head -n 1 | grep -o '[^ ]*$')"
 	command -v ninja >/dev/null && echo -e "Ninja-Build:$(ninja --version)"
 	command -v clang-format >/dev/null && echo -e "CLang-Format:$(clang-format --version | cut -d' ' -f4)"
@@ -31,7 +29,7 @@
 	command -v python3 >/dev/null && echo -e "Python3:$(python3 --version | cut -d' ' -f2)"
 	if command -v wine64 >/dev/null; then
 		echo -e "Wine:$(wine64 --version | sed 's/^wine-\(\S*\).*$/\1/')"
-		winver="$(wine cmd /c ver 2>/dev/null)"
+		winver="$(DISPLAY='' wine cmd /c ver 2>/dev/null)"
 		echo "Wine > Windows:$(echo "${winver:4}" | cut -d' ' -f3)"
 		if [[ -f "${HOME}/.wine/drive_c/python/python.exe" ]]; then
 			echo "Wine > Python:$(wine cmd /c 'python' --version 2>/dev/null)"

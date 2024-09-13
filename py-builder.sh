@@ -28,16 +28,16 @@ function ShowHelp {
     -p, --project : Project directory which is mounted in '/mnt/project' and has a symlink '~/project'.
 
   Commands:
-    build     : Builds the docker image tagged 'gnu-cpp:dev' for self-hosted Nexus repository and requires zipped Qt libraries.
+    build     : Builds the docker image tagged '${img_name}' for self-hosted Nexus repository and requires zipped Qt libraries.
     push      : Pushes the docker image to the self-hosted Nexus repository.
     pull      : Pulls the docker image from the self-hosted Nexus repository.
     base-push : Pushes the base image '${base_img_name}' to the self-hosted Nexus repository.
-    runx      : Runs the docker container named 'gnu-cpp' in the foreground mounting the passed project directory using the hosts X-server.
+    runx      : Runs the docker container named '${container_name}' in the foreground mounting the passed project directory using the host's X-server.
     run       : Same as 'runx' using a fake X-server.
-    stop      : Stops the container named 'gnu-cpp' running in the background.
-    kill      : Kills the container named 'gnu-cpp' running in the background.
-    status    : Return the status of named 'gnu-cpp' the container running in the background.
-    attach    : Attaches to the  in the background running container named 'gnu-cpp'.
+    stop      : Stops the container named '${container_name}' running in the background.
+    kill      : Kills the container named '${container_name}' running in the background.
+    status    : Return the status of named '${container_name}' the container running in the background.
+    attach    : Attaches to the  in the background running container named '${container_name}'.
     versions  : Shows versions of most installed applications within the container.
 "
 }
@@ -165,7 +165,7 @@ case "${cmd}" in
 		docker tag "${NEXUS_REPOSITORY}/${img_name}" "${img_name}"
 		;;
 
-	buildx)
+	build | buildx)
 		# Stop all containers using this image.
 		# shellcheck disable=SC2046
 		if [[ -n "$(docker ps -a -q --filter ancestor="${img_name}")" ]]; then
@@ -173,34 +173,17 @@ case "${cmd}" in
 			docker stop $(docker ps -a -q --filter ancestor="${img_name}")
 		fi
 		# Build the image.
-		docker buildx build \
-			--progress plain \
-			--build-arg "BASE_IMG=${NEXUS_REPOSITORY}/${base_img_name}" \
-			--build-arg "NEXUS_SERVER_URL=${NEXUS_SERVER_URL}" \
-			--build-arg "NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${raw_lib_offset}" \
-			--file "${docker_file}" \
-			--tag "${img_name}" \
-			--network host \
-			"${work_dir}"
-		;;
-
-	build)
-		# Stop all containers using this image.
-		# shellcheck disable=SC2046
-		if [[ -n "$(docker ps -a -q --filter ancestor="${img_name}")" ]]; then
-			echo "Stopping containers using image '${img_name}'."
-			docker stop $(docker ps -a -q --filter ancestor="${img_name}")
-		fi
-		# Build the image.
-		docker build \
-			--progress plain \
-			--build-arg "BASE_IMG=${NEXUS_REPOSITORY}/${base_img_name}" \
-			--build-arg "NEXUS_SERVER_URL=${NEXUS_SERVER_URL}" \
-			--build-arg "NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${raw_lib_offset}" \
-			--file "${docker_file}" \
-			--tag "${img_name}" \
-			--network host \
-			"${work_dir}"
+		dckr_cmd=(docker)
+		dckr_cmd+=("${cmd}")
+		dckr_cmd+=(--progress plain)
+		dckr_cmd+=(--build-arg "BASE_IMG=${NEXUS_REPOSITORY}/${base_img_name}")
+		dckr_cmd+=(--build-arg "NEXUS_SERVER_URL=${NEXUS_SERVER_URL}")
+		dckr_cmd+=(--build-arg "NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${raw_lib_offset}")
+		dckr_cmd+=(--file "${docker_file}")
+		dckr_cmd+=(--tag "${img_name}")
+		dckr_cmd+=(--network host)
+		dckr_cmd+=("${work_dir}")
+		"${dckr_cmd[@]}"
 		# Add also the private repository tag.
 		docker tag "${img_name}" "${NEXUS_REPOSITORY}/${img_name}"
 		;;
@@ -210,48 +193,36 @@ case "${cmd}" in
 		"${0}" run -- /usr/local/bin/test/versions.sh
 		;;
 
-	run)
+	run | runx)
 		if [[ -z "${project_dir}" ]]; then
 			echo "Project (option: -p) is required for this command."
 			exit 1
 		fi
 		# Use option '--privileged' instead of '--device' and '--security-opt' when having fuse mounting problems.
-		docker run \
-			--rm \
-			--interactive \
-			--tty \
-			--device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
-			--net=host \
-			--name="${container_name}" \
-			--env LOCAL_USER="$(id -u):$(id -g)" \
-			--env DISPLAY \
-			--env DEBUG=1 \
-			--volume "${work_dir}/bin:/usr/local/bin/test:ro" \
-			--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro" \
-			--volume "${project_dir}:/mnt/project:rw" \
-			--workdir "/mnt/project/" \
-			"${img_name}" "${@}"
-		;;
-
-	runx)
-		if [[ -z "${project_dir}" ]]; then
-			echo "Project (option: -p) is required for this command."
-			exit 1
+		dckr_cmd=(docker)
+		dckr_cmd+=(run)
+		dckr_cmd+=(--rm)
+		dckr_cmd+=(--interactive)
+		dckr_cmd+=(--tty)
+		dckr_cmd+=(--device /dev/fuse)
+		dckr_cmd+=(--cap-add SYS_ADMIN)
+		dckr_cmd+=(--net=host)
+		dckr_cmd+=(--security-opt apparmor:unconfined)
+		dckr_cmd+=(--name="${container_name}")
+		# Script home/user/bin/entrypoint.sh picks this up or uses the id' from the mounted project user.
+		dckr_cmd+=(--env LOCAL_USER="$(id -u):$(id -g)")
+		dckr_cmd+=(--user user:user)
+		dckr_cmd+=(--env DEBUG=1)
+		dckr_cmd+=(--volume "${work_dir}/bin:/usr/local/bin/test:ro")
+		if [[ "${cmd}" == "runx" ]]; then
+			dckr_cmd+=(--env DISPLAY)
+			dckr_cmd+=(--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro")
 		fi
-		# Use option '--privileged' instead of '--device' and '--security-opt' when having fuse mounting problems.
-		docker run \
-			--rm \
-			--interactive \
-			--tty \
-			--device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
-			--net=host \
-			--name="${container_name}" \
-			--env LOCAL_USER="$(id -u):$(id -g)" \
-			--env DEBUG=1 \
-			--volume "${work_dir}/bin:/usr/local/bin/test:ro" \
-			--volume "${project_dir}:/mnt/project:rw" \
-			--workdir "/mnt/project/" \
-			"${img_name}" "${@}"
+		#dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
+		dckr_cmd+=(--workdir "/mnt/project/")
+		dckr_cmd+=("${img_name}")
+		dckr_cmd+=("${@}")
+		"${dckr_cmd[@]}"
 		;;
 
 	stop | kill)

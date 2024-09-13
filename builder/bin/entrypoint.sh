@@ -1,22 +1,29 @@
 #!/usr/bin/env bash
 
+# Bailout on first error.
+set -e
+
 function WriteLog {
 	echo "${@}" 1>&2
 }
 
 # Report the current command to stderr
-[[ -n "${DEBUG}" ]] && WriteLog "Entrypoint:" "${@}"
+[[ -n "${DEBUG}" ]] && WriteLog "Entrypoint($(id -nu)/$(id -u)):" "${@}"
 
 # Check if root is executing the entrypoint.
 if [[ "$(id -u)" -eq 0 ]]; then
 	# When the LOCAL user id and group are not given.
-	if [[ -z "${LOCAL_USER}" ]]; then
+	if [[ -n "${LOCAL_USER}" ]]; then
+		WriteLog "User uid:gid (${LOCAL_USER}) from passed environment variable 'LOCAL_USER'."
+	else
 		# Try taking them from the mounted project directory if it exists.
-		if [[ -d /mnt/project ]]; then
+		if mountpoint -q /mnt/project; then
 			LOCAL_USER="$(stat /mnt/project --format='%u:%g')"
+			WriteLog "User uid:gid (${LOCAL_USER}) from project mount."
 		# Taking them from the home directory.
 		else
 			LOCAL_USER="$(stat "${HOME}" --format='%u:%g')"
+			WriteLog "User uid:gid (${LOCAL_USER}) from current home directory."
 		fi
 	fi
 	usermod -u "$(echo "${LOCAL_USER}" | cut -d: -f1)" user || exit 1
@@ -92,11 +99,17 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	else
 		sudo --user=user --chdir="$(pwd)" --login
 	fi
+# When the current user is 'user' execute the script using sudo.
+elif [[ "$(id -nu)" == "user" ]] ; then
+	# Execute this script bu now as root passing the environment variables.
+	sudo -E "${0}" "${@}" || exit 1
 else
 	WriteLog "User(${HOME}): $(id -u) $(stat "${HOME}" --format='%u:%g') > '${*}'"
 	echo "Entrypoint not running as root which is required!
-	When using CLion replace the Docker arguments in the configuration with:
-		 --rm --privileged --env LOCAL_USER=\"$(ig -u):$(ig -u)\"
+When using CLion replace the Docker arguments in the configuration with:
+    --rm --privileged --env LOCAL_USER=\"$(id -u):$(id -u)\"
+  or:
+    --rm --privileged --user user:user
 	"
 	exit 1
 fi
