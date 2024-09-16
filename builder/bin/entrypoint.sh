@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 
 function WriteLog {
-	echo "${@}" 1>&2
+	if [[ -n "${DEBUG}" ]]; then
+		echo "${@}" 1>&2
+	fi
 }
 
 # Report the current command to stderr
-[[ -n "${DEBUG}" ]] && WriteLog "Entrypoint($(id -u)):" "${@}"
+WriteLog "Entrypoint($(id -u)):" "${@}"
 
 # Check if root is executing the entrypoint.
 if [[ "$(id -u)" -eq 0 ]]; then
@@ -39,16 +41,16 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			WriteLog "Binding wine-prefix '${WINEPREFIX}' onto '${HOME}/.wine' failed!"
 			exit 1
 		fi
-		[[ -n "${DEBUG}" ]] && WriteLog "Wine prefix '${WINEPREFIX}' bound to '${HOME}/.wine'."
+		WriteLog "Wine prefix '${WINEPREFIX}' bound to '${HOME}/.wine'."
 		# Check if an import registry is available.
 		if [[ -f "${HOME}/import.reg" ]]; then
-			[[ -n "${DEBUG}" ]] && WriteLog "Importing registry file '${HOME}/import.reg'."
+			WriteLog "Importing registry file '${HOME}/import.reg'."
 			sudo --user=user wine regedit "${HOME}/import.reg" 2>/dev/null
 		fi
 	fi
 	# Check if the Qt library is available.
 	if [[ -d "/usr/local/lib/Qt" ]]; then
-		[[ -n "${DEBUG}" ]] && WriteLog "Qt zipped library is available."
+		WriteLog "Qt zipped library is available."
 		mkdir --parents "${HOME}/lib"
 		ln -s "/usr/local/lib/Qt" "${HOME}/lib/Qt"
 	else
@@ -59,7 +61,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 				WriteLog "Mounting Qt library zip-file '${qt_lnx_zip}' onto '${HOME}/lib/Qt' failed!"
 				exit 1
 			else
-				[[ -n "${DEBUG}" ]] && WriteLog "Qt zipped library is mounted on '${HOME}/lib/Qt'."
+				WriteLog "Qt zipped library is mounted on '${HOME}/lib/Qt'."
 			fi
 		fi
 	fi
@@ -76,23 +78,25 @@ if [[ "$(id -u)" -eq 0 ]]; then
 				WriteLog "Mounting QtWin library zip-file '${qt_lnx_zip}' onto '${HOME}/lib/QtWin' failed!"
 				exit 1
 			else
-				[[ -n "${DEBUG}" ]] && WriteLog "QtWin zipped library is mounted on '${HOME}/lib/QtWin'."
+				WriteLog "QtWin zipped library is mounted on '${HOME}/lib/QtWin'."
 			fi
 		fi
 	fi
 
-	[[ -n "${DEBUG}" ]] && WriteLog "Working directory: $(pwd)"
+	WriteLog "Working directory: $(pwd)"
 	# Execute CMD passed by the user when starting the image.
 	if [[ $# -ne 0 ]]; then
 		# Hack to set LD_LIBRARY_PATH when needed.
 		exec_script="$(realpath "$(dirname "${1}")/../lnx-exec.sh")"
 		if [[ -f "${exec_script}" ]]; then
-			WriteLog "Using execution script '${exec_script}'."
+			WriteLog "Calling execution script: '${exec_script}'" "${@}"
 			sudo --user=user --chdir="$(pwd)" -- "${exec_script}" "${@}"
 		else
+			WriteLog "Calling command:" "${@}"
 			sudo --user=user --chdir="$(pwd)" -- "${@}"
 		fi
 	else
+		WriteLog "No command and logging in as user."
 		sudo --user=user --chdir="$(pwd)" --login
 	fi
 # When the current user is 'user' execute the script using sudo.
