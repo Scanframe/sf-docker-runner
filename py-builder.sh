@@ -21,7 +21,7 @@ function ShowHelp {
 	# Get only the filename of the current script.
 	cmd_name="$(basename "${0}")"
 	echo "Usage: ${cmd_name} [<options>] <command>
-  Execute a single or multiple actions for docker and/or it's container.
+  Execute an actions for docker and/or it's container.
 
   Options:
     -h, --help    : Show this help.
@@ -39,7 +39,8 @@ function ShowHelp {
     status    : Return the status of named '${container_name}' the container running in the background.
     attach    : Attaches to the  in the background running container named '${container_name}'.
     versions  : Shows versions of most installed applications within the container.
-"
+    docker-push : Push '${container_name}' to userspace '${DOCKER_USER}' on docker.com."
+  "${script_dir}/nexus-docker.sh" --help-short
 }
 
 # When no arguments or options are given show the help.
@@ -114,35 +115,6 @@ fi
 
 case "${cmd}" in
 
-	info)
-		docker system df
-		;;
-
-	prune)
-		# Prune build cache.
-		docker buildx prune --all
-		;;
-
-	repo | repository)
-		curl -v \
-			-u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-			-X 'GET' \
-			-H 'accept: application/json' \
-			"${NEXUS_SERVER_URL}/service/rest/v1/repositories/docker/hosted/docker-image"
-		;;
-
-	list)
-		# docker image ls --all "*"
-		curl -v \
-			-u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-			-X 'GET' \
-			"${NEXUS_SERVER_URL}/service/rest/v1/search/assets?repository=docker-image&format=docker"
-		;;
-
-	search)
-		docker search "${NEXUS_REPOSITORY}/t*" --format "{{.Name}}"
-		;;
-
 	base-push)
 		docker pull "${base_img_name}"
 		docker tag "${base_img_name}" "${NEXUS_REPOSITORY}/${base_img_name}"
@@ -154,6 +126,14 @@ case "${cmd}" in
 		docker tag "${NEXUS_REPOSITORY}/${img_name}" "${img_name}"
 		# Push the repository.
 		docker image push "${NEXUS_REPOSITORY}/${img_name}"
+		;;
+
+	docker-push)
+		docker_img_name="${DOCKER_USER}/${img_name%%:*}"
+		# Add tag to having the correct prefix so it can be pushed to a private repository.
+		docker tag "${NEXUS_REPOSITORY}/${img_name}" "${docker_img_name}"
+		# Push the repository.
+		docker image push "${docker_img_name}"
 		;;
 
 	pull)
@@ -218,7 +198,7 @@ case "${cmd}" in
 			dckr_cmd+=(--env DISPLAY)
 			dckr_cmd+=(--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro")
 		fi
-		#dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
+		dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
 		dckr_cmd+=(--workdir "/mnt/project/")
 		dckr_cmd+=("${img_name}")
 		dckr_cmd+=("${@}")

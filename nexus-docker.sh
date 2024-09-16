@@ -16,23 +16,29 @@ function ShowHelp {
 	local cmd_name
 	# Get only the filename of the current script.
 	cmd_name="$(basename "${0}")"
-	echo "Usage: ${cmd_name} [<options>] <command>
-  Execute a single or multiple actions for docker and/or it's container.
+	if [[ "$#" -eq 0 ]]; then
+		echo "Usage: ${cmd_name} [<options>] <command>
+  Execute an actions for docker and/or it's container.
 
   Options:
     -h, --help    : Show this help.
 
-  Commands:
+  Commands:"
+  else
+		echo -n "
+  Command passed to 'nexus-docker.sh':"
+  fi
+  echo -e "
     du          : Show docker disk usage.
     local       : Docker client list local images.
-    list        : List remote images on server.
+    list        : List remote images on Nexus server.
     login       : Log Docker in on the self hosted Nexus registry repository.
-    docker-login: Log Docker in on docker.com registry.
+    docker-login: Log Docker in on docker.com registry as '${DOCKER_USER}'.
     logout      : Log docker out from any repository.
     prune       : Remove all Docker build cache.
     remove      : Removes a local image. (not implemented)
     wine-reg    : Compress registry files from common/wine-reg.
-    wine-reg-up : Upload compressed file to Nexus raw repository.
+    wine-reg-up : Upload compressed registry files to Nexus raw repository.
 "
 }
 
@@ -54,7 +60,7 @@ source "${script_dir}/.nexus-credentials"
 cd "${script_dir}" || exit 1
 
 # Parse options.
-temp=$(getopt -o 'hp:' --long 'help,project:' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hp:' --long 'help,help-short,project:' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	ShowHelp
@@ -68,6 +74,11 @@ while true; do
 
 		-h | --help)
 			ShowHelp
+			exit 0
+			;;
+
+		--help-short)
+			ShowHelp 1
 			exit 0
 			;;
 
@@ -112,12 +123,6 @@ case "${cmd}" in
 			"${NEXUS_SERVER_URL}/service/rest/v1/components?repository=${NEXUS_REPO_NAME}" |
 			jq -r '.items[]|(.repository + " " + .name + " " + .version + " " + .id)' |
 			column --table --separator " " --table-columns "Repository,Name,Version,Id" --output-separator " | "
-#		curl --silent \
-#			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-#			-X 'GET' \
-#			"${NEXUS_SERVER_URL}/service/rest/v1/search/components?repository=${NEXUS_REPO_NAME}" |
-#			jq -r '.items[]|(.path + " " + .uploader + " " + .lastModified)' |
-#			column --table --separator " " --table-columns "Path,Uploader,Modified" --output-separator " | "
 		;;
 
 	login)
@@ -134,7 +139,7 @@ case "${cmd}" in
 		docker logout "${NEXUS_REPOSITORY}"
 		;;
 
-	rm | remove)
+	remove)
 		echo "Must still be implemented."
 		;;
 

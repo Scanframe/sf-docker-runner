@@ -21,31 +21,30 @@ function ShowHelp {
 	# Get only the filename of the current script.
 	cmd_name="$(basename "${0}")"
 	echo "Usage: ${cmd_name} [<options>] <command>
-  Execute a single or multiple actions for docker and/or it's container.
+  Execute an actions for docker and/or it's container.
 
   Options:
     -h, --help    : Show this help.
     -p, --project : Project directory which is mounted in '/mnt/project' and has a symlink '~/project'.
 
   Commands:
-    build     : Builds the docker image tagged '${img_name}' for self-hosted Nexus repository and requires zipped Qt libraries.
-    push      : Pushes the docker image to the self-hosted Nexus repository.
-    pull      : Pulls the docker image from the self-hosted Nexus repository.
-    base-push : Pushes the base image '${base_img_name}' to the self-hosted Nexus repository.
-    qt-lnx    : Generates the 'qt-win.zip' from the current users Linux Qt library.
-    qt-win    : Generates the qt-win-zip from the current users Windows Qt library.
-    qt-lnx-up : Uploads the generated zip-file to the Nexus server as 'repository/shared/library/qt-lnx.zip'.
-    qt-win-up : Uploads the generated zip-file to the Nexus server as 'repository/shared/library/qt-win.zip'.
-    runx      : Runs the docker container named '${container_name}' in the foreground mounting the passed project directory using the host's X-server.
-    run       : Same as 'runx' using a fake X-server.
-    stop      : Stops the container named '${container_name}' running in the background.
-    kill      : Kills the container named '${container_name}' running in the background.
-    status    : Return the status of named '${container_name}' the container running in the background.
-    attach    : Attaches to the  in the background running container named '${container_name}'.
-    versions  : Shows versions of most installed applications within the container.
-    login     : Login on Docker Nexus repository.
-    logout    : Logout Docker from any repository.
-"
+    build       : Builds the docker image tagged '${img_name}' for self-hosted Nexus repository and requires zipped Qt libraries.
+    push        : Pushes the docker image to the self-hosted Nexus repository.
+    pull        : Pulls the docker image from the self-hosted Nexus repository.
+    base-push   : Pushes the base image '${base_img_name}' to the self-hosted Nexus repository.
+    qt-lnx      : Generates the 'qt-win.zip' from the current users Linux Qt library.
+    qt-win      : Generates the qt-win-zip from the current users Windows Qt library.
+    qt-lnx-up   : Uploads the generated zip-file to the Nexus server as 'repository/shared/library/qt-lnx.zip'.
+    qt-win-up   : Uploads the generated zip-file to the Nexus server as 'repository/shared/library/qt-win.zip'.
+    runx        : Runs the docker container named '${container_name}' in the foreground mounting the passed project directory using the host's X-server.
+    run         : Same as 'runx' using a fake X-server.
+    stop        : Stops the container named '${container_name}' running in the background.
+    kill        : Kills the container named '${container_name}' running in the background.
+    status      : Return the status of named '${container_name}' the container running in the background.
+    attach      : Attaches to the  in the background running container named '${container_name}'.
+    versions    : Shows versions of most installed applications within the container.
+    docker-push : Push '${container_name}' to userspace '${DOCKER_USER}' on docker.com."
+    "${script_dir}/nexus-docker.sh" --help-short
 }
 
 # When no arguments or options are given show the help.
@@ -192,10 +191,11 @@ case "${cmd}" in
 		;;
 
 	docker-push)
+		docker_img_name="${DOCKER_USER}/${img_name%%:*}"
 		# Add tag to having the correct prefix so it can be pushed to a private repository.
-		#docker tag "${NEXUS_REPOSITORY}/${img_name}" "${img_name}"
+		docker tag "${NEXUS_REPOSITORY}/${img_name}" "${docker_img_name}"
 		# Push the repository.
-		docker image push "${DOCKER_USER}/gnu-cpp:latest"
+		docker image push "${docker_img_name}"
 		;;
 
 	pull)
@@ -260,7 +260,7 @@ case "${cmd}" in
 			dckr_cmd+=(--env DISPLAY)
 			dckr_cmd+=(--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro")
 		fi
-		#dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
+		dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
 		dckr_cmd+=(--workdir "/mnt/project/")
 		dckr_cmd+=("${img_name}")
 		dckr_cmd+=("${@}")
