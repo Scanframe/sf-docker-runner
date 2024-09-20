@@ -18,7 +18,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 #RUN apt-get update && apt-get --yes upgrade
 #
 ## Install the packages needed for adding other package repositories.
-#RUN apt --yes install wget curl gpg lsb-release software-properties-common
+#RUN apt-get --yes install wget curl gpg lsb-release software-properties-common
 #
 ## Add the LVM tool chain as apt repository for the latest version.
 #RUN wget https://apt.llvm.org/llvm-snapshot.gpg.key -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
@@ -44,7 +44,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install wine 64-bit only and Wine HQ to get Wine version 9.0 eventually.
 # Also add 'xvfb' to create a fake X-server to run and install Wine properly.
 RUN apt-get update && apt-get --yes upgrade && \
-    apt --yes install wget curl gpg lsb-release software-properties-common iproute2 iputils-ping binutils && \
+    apt-get --yes install wget curl gpg lsb-release software-properties-common iproute2 iputils-ping binutils openssh-server && \
+    mkdir /run/sshd && \
     add-apt-repository --yes --no-update ppa:git-core/ppa && \
     wget --quiet "https://apt.llvm.org/llvm-snapshot.gpg.key" -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
     apt-add-repository --yes --no-update "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc) main" && \

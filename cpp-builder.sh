@@ -232,10 +232,10 @@ case "${cmd}" in
 
 	versions)
 		# Just reenter the script using the the correct arguments.
-		"${0}" run -- /usr/local/bin/test/versions.sh
+		"${0}" run -- /home/user/bin/versions.sh
 		;;
 
-	run | runx)
+	run | runx | start)
 		if [[ -z "${project_dir}" ]]; then
 			echo "Project (option: -p) is required for this command."
 			exit 1
@@ -249,12 +249,13 @@ case "${cmd}" in
 		dckr_cmd+=(--device /dev/fuse)
 		dckr_cmd+=(--cap-add SYS_ADMIN)
 		dckr_cmd+=(--security-opt apparmor:unconfined)
-		dckr_cmd+=(--net=host)
+		dckr_cmd+=(--network host)
+		dckr_cmd+=(--hostname "${hostname}")
 		dckr_cmd+=(--name="${container_name}")
 		# Script home/user/bin/entrypoint.sh picks this up or uses the id' from the mounted project user.
-		#dckr_cmd+=(--env LOCAL_USER="$(id -u):$(id -g)")
+		dckr_cmd+=(--env LOCAL_USER="$(id -u):$(id -g)")
 		dckr_cmd+=(--user user:user)
-		dckr_cmd+=(--env DEBUG=1)
+		#dckr_cmd+=(--env DEBUG=1)
 		#dckr_cmd+=(--volume "${work_dir}/bin:/usr/local/bin/test:ro")
 		if [[ "${cmd}" == "runx" ]]; then
 			dckr_cmd+=(--env DISPLAY)
@@ -262,9 +263,12 @@ case "${cmd}" in
 		fi
 		dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
 		dckr_cmd+=(--workdir "/mnt/project/")
-		dckr_cmd+=("${img_name}")
-		dckr_cmd+=("${@}")
-		"${dckr_cmd[@]}"
+		if [[ "${cmd}" == "start" ]]; then
+			dckr_cmd+=(--detach)
+			"${dckr_cmd[@]}" "${img_name}" sudo -- /usr/sbin/sshd -e -D -p 3022
+		else
+			"${dckr_cmd[@]}" "${img_name}" "${@}"
+		fi
 		;;
 
 	stop | kill)

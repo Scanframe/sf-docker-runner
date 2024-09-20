@@ -101,7 +101,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	fi
 # When the current user is 'user' execute the script using sudo.
 elif [[ "$(id -nu)" == "user" ]] ; then
-	# Execute this script bu now as root passing the environment variables.
+	# Execute this script but now as root passing the environment variables.
 	sudo -E "${0}" "${@}" || exit 1
 else
 	WriteLog "User(${HOME}): $(id -u) $(stat "${HOME}" --format='%u:%g') > '${*}'"
