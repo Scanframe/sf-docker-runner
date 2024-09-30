@@ -1,5 +1,5 @@
 # Base image must be given from the build command line.
-ARG BASE_IMG
+ARG BASE_IMG="ubuntu"
 FROM ${BASE_IMG}
 
 LABEL \
@@ -43,6 +43,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Make sure image is up-to-date
 # Install wine 64-bit only and Wine HQ to get Wine version 9.0 eventually.
 # Also add 'xvfb' to create a fake X-server to run and install Wine properly.
+# Packge winehq-stable is not yet available for Ubuntu version 24.04 so there is a workaround when it does.
 RUN apt-get update && apt-get --yes upgrade && \
     apt-get --yes install wget curl gpg lsb-release software-properties-common iproute2 iputils-ping binutils openssh-server && \
     mkdir /run/sshd && \
@@ -58,8 +59,9 @@ RUN apt-get update && apt-get --yes upgrade && \
     x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 wine64 xvfb && \
     wget -q https://dl.winehq.org/wine-builds/winehq.key -O - | gpg --dearmor --output /etc/apt/trusted.gpg.d/winehq.gpg && \
     apt-add-repository --uri "https://dl.winehq.org/wine-builds/$(lsb_release -is | tr '[:upper:]' '[:lower:]')/" --component main && \
-    dpkg --add-architecture i386 && \
-    apt-get --yes update && apt-get --yes install winehq-stable python3 python3-venv && \
+    dpkg --add-architecture i386 && apt-get --yes update && \
+    (apt-get --yes install --simulate winehq-stable && apt-get --yes install winehq-stable || apt-get --yes install wine) && \
+    apt-get --yes install python3 python3-venv && \
     apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*
 
 # Copy some needed scripts to the root bin directory.
@@ -92,7 +94,9 @@ RUN chown -R user:user "${HOME}"
 # Set user password to 'user'.
 RUN echo 'user:user' | chpasswd
 # Creating file '/etc/sudoers.d/wine-user' to allow sudo without password.
-RUN bash -c 'echo "user ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/plain-user'
+RUN bash -c 'echo "user ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/plain-user'
+# Ubuntu 24.04 does not allow the 'sudo' command '-D' or '--chdir' option even for the 'root' user.
+RUN bash -c 'echo "root ALL=(ALL:ALL) CWD=* NOPASSWD: ALL" > /etc/sudoers.d/root-user'
 
 RUN printf "\
 # Modify the defaults for the members of User_Alias USERLIST\n\
@@ -135,12 +139,13 @@ RUN sed -i -e 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
 # Use the arguments to pass the library URL.
 ARG NEXUS_SERVER_URL
 ARG NEXUS_RAW_LIB_URL
+ARG QT_VERSION
 # Get the compressed Qt library.
 #RUN wget "${NEXUS_RAW_LIB_URL}/qt-lnx.zip" -O "qt-lnx.zip"
-ADD "${NEXUS_RAW_LIB_URL}/qt-lnx.zip" "qt-lnx.zip"
+ADD "${NEXUS_RAW_LIB_URL}/qt-lnx-${QT_VERSION}.zip" "qt-lnx.zip"
 # Get the compressed QtWin library.
 #RUN wget "${NEXUS_RAW_LIB_URL}/qt-win.zip" -O "qt-win.zip"
-ADD "${NEXUS_RAW_LIB_URL}/qt-win.zip" "qt-win.zip"
+ADD "${NEXUS_RAW_LIB_URL}/qt-win-${QT_VERSION}.zip" "qt-win.zip"
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
 ENV WINEPREFIX="/opt/wine-prefix"
@@ -150,6 +155,9 @@ RUN (Xvfb :10 -screen 0 1024x768x24 &) && \
 
 # Copy the Windows registry files as a fix since no registry files are created during the build.
 RUN wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz" -O- | tar -C "${WINEPREFIX}" -xzf -
+
+# Ubuntu 24.04 has a default 'ubuntu' user.
+RUN userdel --remove ubuntu || exit 0
 
 # Allow the initial user to run the sudo command.
 RUN usermod -aG sudo user
