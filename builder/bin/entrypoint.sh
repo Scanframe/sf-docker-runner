@@ -25,15 +25,15 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			WriteLog "User uid:gid (${LOCAL_USER}) from current home directory."
 		fi
 	fi
-	usermod -u "$(echo "${LOCAL_USER}" | cut -d: -f1)" user || exit 1
-	groupmod -g "$(echo "${LOCAL_USER}" | cut -d: -f2)" user || exit 1
-	usermod -aG "${WINE_USER}" user || exit 1
+	usermod --uid "$(echo "${LOCAL_USER}" | cut --delimiter=: -f1)" user || exit 1
+	groupmod --gid "$(echo "${LOCAL_USER}" | cut --delimiter=: -f2)" user || exit 1
+	usermod --append --groups "${WINE_USER}" user || exit 1
 	# Change the owner of 'user' home directory and all in the 'bin' directory.
 	chown user:user ~user
 	#chown user:user -R ~user/.wine
-	chown user:user -R ~user/bin
+	chown user:user --recursive ~user/bin
 	# Add symlink to project mount when it exists.
-	[[ -d /mnt/project ]] && ln -s /mnt/project ~/project
+	[[ -d /mnt/project ]] && ln --symbolic /mnt/project ~/project
 	# Check if the wine-prefix directory available.
 	if [[ -d "${WINEPREFIX}" ]]; then
 		sudo --user=user mkdir "${HOME}/.wine"

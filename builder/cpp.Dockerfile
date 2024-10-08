@@ -56,11 +56,11 @@ RUN apt-get update && apt-get --yes upgrade && \
     locales sudo git make cmake ninja-build gcc-12 g++-12 g++-mingw-w64-x86-64 gdb valgrind clang-format chrpath dpkg-dev \
     bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix \
     libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev strace exiftool rpm nsis \
-    x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 wine64 xvfb && \
+    x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 xvfb && \
     wget -q https://dl.winehq.org/wine-builds/winehq.key -O - | gpg --dearmor --output /etc/apt/trusted.gpg.d/winehq.gpg && \
     apt-add-repository --uri "https://dl.winehq.org/wine-builds/$(lsb_release -is | tr '[:upper:]' '[:lower:]')/" --component main && \
     dpkg --add-architecture i386 && apt-get --yes update && \
-    (apt-get --yes install --simulate winehq-stable && apt-get --yes install winehq-stable || apt-get --yes install wine) && \
+    (apt-get --yes install --simulate winehq-stable && apt-get --yes install wine32:i386 wine64 winehq-stable || apt-get --yes install wine32:i386 wine64 wine) && \
     apt-get --yes install python3 python3-venv && \
     apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*
 
@@ -148,10 +148,12 @@ ADD "${NEXUS_RAW_LIB_URL}/qt-lnx-${QT_VERSION}.zip" "qt-lnx.zip"
 ADD "${NEXUS_RAW_LIB_URL}/qt-win-${QT_VERSION}.zip" "qt-win.zip"
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
+# Remove wine temporary directories '/tmp/wine-*' at the end to allow running as a different.
 ENV WINEPREFIX="/opt/wine-prefix"
 RUN (Xvfb :10 -screen 0 1024x768x24 &) && \
     sudo mkdir "${WINEPREFIX}" && sudo chown user:user "${WINEPREFIX}" && \
-    sudo --user=user WINEPREFIX="${WINEPREFIX}" WINEDLLOVERRIDES="mscoree=d" DISPLAY=:10 wineboot
+    sudo --user=user WINEPREFIX="${WINEPREFIX}" WINEDLLOVERRIDES="mscoree=d" DISPLAY=:10 wineboot && \
+    rm -rf /tmp/wine-*
 
 # Copy the Windows registry files as a fix since no registry files are created during the build.
 RUN wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz" -O- | tar -C "${WINEPREFIX}" -xzf -
