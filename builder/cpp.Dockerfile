@@ -53,7 +53,7 @@ RUN apt-get update && apt-get --yes upgrade && \
     wget --quiet -O - "https://apt.kitware.com/keys/kitware-archive-latest.asc" | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
     apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" && \
     apt-get --yes install \
-    locales sudo git make cmake ninja-build gcc-12 g++-12 g++-mingw-w64-x86-64 gdb valgrind clang-format chrpath dpkg-dev \
+    locales sudo git make cmake ninja-build gcc-12 g++-12 g++-mingw-w64-x86-64 gdb-mingw-w64-target gdb valgrind clang-format chrpath dpkg-dev \
     bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix \
     libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev strace exiftool rpm nsis \
     x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 xvfb && \
