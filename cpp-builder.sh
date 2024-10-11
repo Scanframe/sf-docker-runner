@@ -47,10 +47,12 @@ function ShowHelp {
     pull        : Pulls the docker image from the self-hosted Nexus repository.
     base-pull   : Pulls the base image '${base_img_name}:${base_img_tag}' and tags it for the self-hosted docker registry.
     base-push   : Pulls the base image '${base_img_name}:${base_img_tag}' when not there and pushes it to the self-hosted Nexus docker registry.
-    qt-lnx      : Generates the 'qt-win.zip' from the current users Linux Qt library.
-    qt-win      : Generates the qt-win-zip from the current users Windows Qt library.
+    qt-lnx      : Generates the 'qt-win.zip' from the current user's Linux Qt library.
+    qt-win      : Generates the qt-win-zip from the current user's Cross Windows Qt library.
+    qt-w64      : Generates the qt-w64-zip from the Windows Qt library relative to the current user's Qt.
     qt-lnx-up   : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-lnx-<qt-ver>.zip'.
     qt-win-up   : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-win-<qt-ver>.zip'.
+    qt-w64-up   : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-w64-<qt-ver>.zip'.
     run         : Runs the docker container named '${container_name}' in the foreground mounting the passed project directory using the host's X-server.
     runx        : Same as 'runx' using a fake X-server.
     stop        : Stops the container named '${container_name}' running in the background.
@@ -86,6 +88,8 @@ docker_file="${work_dir}/cpp.Dockerfile"
 qt_lnx_filename="qt-lnx"
 # Base zip-file name containing the Windows Qt library.
 qt_win_filename="qt-win"
+# Base zip-file name containing the Windows Qt library.
+qt_w64_filename="qt-w64"
 
 # Change to the current script directory.
 cd "${script_dir}" || exit 1
@@ -180,23 +184,25 @@ case "${cmd}" in
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
-		qt_lnx_zip="${temp_dir}/${qt_lnx_filename}-${qt_ver}.zip"
+		zip_file="${temp_dir}/${qt_lnx_filename}-${qt_ver}.zip"
 		# Remove the current zip file.
-		[[ -f "${qt_lnx_zip}" ]] && rm "${qt_lnx_zip}"
+		[[ -f "${zip_file}" ]] && rm "${zip_file}"
 		# Change directory in order for zip to store the correct path.
 		pushd "${lib_dir}/Qt"
-		zip --display-bytes --recurse-paths --symlinks "${qt_lnx_zip}" "${qt_ver}/gcc_64/"{bin,lib,include,libexec,mkspecs,plugins}
+		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}/gcc_64/"{bin,lib,include,libexec,mkspecs,plugins}
 		popd
-		ls -lah "${qt_lnx_zip}"
+		ls -lah "${zip_file}"
 		;;
 
 	qt-lnx-up)
+		# Form the zip-filepath using the found or set Qt version.
+		zip_file="${temp_dir}/${qt_lnx_filename}-${qt_ver}.zip"
 		# Upload file Linux Qt library.
 		curl \
 			--progress-bar \
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-			--upload-file "${qt_lnx_zip}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/${qt_lnx_filename}-${qt_ver}.zip"
+			--upload-file "${zip_file}" \
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/"
 		;;
 
 	qt-win)
@@ -206,24 +212,56 @@ case "${cmd}" in
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
-		qt_win_zip="${temp_dir}/${qt_win_filename}-${qt_ver}.zip"
+		zip_file="${temp_dir}/${qt_win_filename}-${qt_ver}.zip"
 		# Remove the current zip file.
-		[[ -f "${qt_win_zip}" ]] && rm "${qt_win_zip}"
+		[[ -f "${zip_file}" ]] && rm "${zip_file}"
 		# Change directory in order for zip to store the correct path.
 		pushd "${lib_dir}/QtWin"
 		# Zip all files except Windows executables.
-		zip --display-bytes --recurse-paths --symlinks "${qt_win_zip}" "${qt_ver}/mingw_64/"{bin,lib,include,libexec,mkspecs,plugins} -x '*.exe'
+		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}/mingw_64/"{bin,lib,include,libexec,mkspecs,plugins} -x '*.exe'
 		popd
-		ls -lah "${qt_win_zip}"
+		ls -lah "${zip_file}"
 		;;
 
 	qt-win-up)
+		# Form the zip-filepath using the found or set Qt version.
+		zip_file="${temp_dir}/${qt_win_filename}-${qt_ver}.zip"
 		# Upload file Windows Qt library.
 		curl \
 			--progress-bar \
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-			--upload-file "${qt_win_zip}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/qt-win.zip"
+			--upload-file "${zip_file}" \
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/"
+		;;
+
+	qt-w64)
+		# Check if the Qt version library directory exists for Windows.
+		qt_w64_dir="$(realpath "${lib_dir}/Qt")/../../windows/Qt"
+		if [[ ! -d "${qt_w64_dir}/${qt_ver}" ]]; then
+			echo "Qt version directory '${qt_w64_dir}/${qt_ver}' does not exist!"
+			exit 1
+		fi
+		# Form the zip-filepath using the found or set Qt version.
+		zip_file="${temp_dir}/${qt_w64_filename}-${qt_ver}.zip"
+		# Remove the current zip file.
+		[[ -f "${zip_file}" ]] && rm "${zip_file}"
+		# Change directory in order for zip to store the correct path.
+		pushd "${qt_w64_dir}"
+		# Zip all files except Windows executables.
+		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}/mingw_64/"{bin,lib,include,libexec,mkspecs,plugins}
+		popd
+		ls -lah "${zip_file}"
+		;;
+
+	qt-w64-up)
+		# Form the zip-filepath using the found or set Qt version.
+		zip_file="${temp_dir}/${qt_w64_filename}-${qt_ver}.zip"
+		# Upload file Windows Qt library.
+		curl \
+			--progress-bar \
+			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+			--upload-file "${zip_file}" \
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/"
 		;;
 
 	push)
