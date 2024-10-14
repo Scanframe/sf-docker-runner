@@ -42,26 +42,28 @@ function ShowHelp {
     --qt-ver      : Version of the the Qt library to instead of newest one available.
 
   Commands:
-    build       : Builds the docker image tagged '${img_name}:${img_tag}' for self-hosted Nexus repository and requires zipped Qt libraries.
-    push        : Pushes the docker image to the self-hosted Nexus repository.
-    pull        : Pulls the docker image from the self-hosted Nexus repository.
-    base-pull   : Pulls the base image '${base_img_name}:${base_img_tag}' and tags it for the self-hosted docker registry.
-    base-push   : Pulls the base image '${base_img_name}:${base_img_tag}' when not there and pushes it to the self-hosted Nexus docker registry.
-    qt-lnx      : Generates the 'qt-win.zip' from the current user's Linux Qt library.
-    qt-win      : Generates the qt-win-zip from the current user's Cross Windows Qt library.
-    qt-w64      : Generates the qt-w64-zip from the Windows Qt library relative to the current user's Qt.
-    qt-lnx-up   : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-lnx-<qt-ver>.zip'.
-    qt-win-up   : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-win-<qt-ver>.zip'.
-    qt-w64-up   : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-w64-<qt-ver>.zip'.
-    run         : Runs the docker container named '${container_name}' in the foreground mounting the passed project directory using the host's X-server.
-    runx        : Same as 'runx' using a fake X-server.
-    stop        : Stops the container named '${container_name}' running in the background.
-    start       : Starts the container named '${container_name}' running in the background with sshd service enabled.
-    kill        : Kills the container named '${container_name}' running in the background.
-    status      : Return the status of named '${container_name}' the container running in the background.
-    attach      : Attaches to the  in the background running container named '${container_name}'.
-    versions    : Shows versions of most installed applications within the container.
-    docker-push : Push '${container_name}' to userspace '${DOCKER_USER}' on docker.com."
+    build           : Builds the docker image tagged '${img_name}:${img_tag}' for self-hosted Nexus repository and requires zipped Qt libraries.
+    push            : Pushes the docker image to the self-hosted Nexus repository.
+    pull            : Pulls the docker image from the self-hosted Nexus repository.
+    base-pull       : Pulls the base image '${base_img_name}:${base_img_tag}' and tags it for the self-hosted docker registry.
+    base-push       : Pulls the base image '${base_img_name}:${base_img_tag}' when not there and pushes it to the self-hosted Nexus docker registry.
+    qt-lnx          : Generates the 'qt-lnx.zip' from the current user's Linux Qt library.
+    qt-win          : Generates the qt-win.zip from the current user's Cross Windows Qt library.
+    qt-w64          : Generates the qt-w64.zip from the Windows Qt library relative to the current user's Qt.
+    qt-w64-tools    : Generates the qt-tools.zip from the Windows Qt library relative to the current user's Qt.
+    qt-lnx-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-lnx-<qt-ver>.zip'.
+    qt-win-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-win-<qt-ver>.zip'.
+    qt-w64-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-w64-<qt-ver>.zip'.
+    qt-w64-tools-up : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-w64-tools.zip'.
+    run             : Runs the docker container named '${container_name}' in the foreground mounting the passed project directory using the host's X-server.
+    runx            : Same as 'runx' using a fake X-server.
+    stop            : Stops the container named '${container_name}' running in the background.
+    start           : Starts the container named '${container_name}' running in the background with sshd service enabled.
+    kill            : Kills the container named '${container_name}' running in the background.
+    status          : Return the status of named '${container_name}' the container running in the background.
+    attach          : Attaches to the  in the background running container named '${container_name}'.
+    versions        : Shows versions of most installed applications within the container.
+    docker-push     : Push '${container_name}' to userspace '${DOCKER_USER}' on docker.com."
     "${script_dir}/nexus-docker.sh" --help-short
 }
 
@@ -90,6 +92,8 @@ qt_lnx_filename="qt-lnx"
 qt_win_filename="qt-win"
 # Base zip-file name containing the Windows Qt library.
 qt_w64_filename="qt-w64"
+# Base zip-file name containing the Windows Qt library.
+qt_w64_tools_filename="qt-w64-tools"
 
 # Change to the current script directory.
 cd "${script_dir}" || exit 1
@@ -256,6 +260,36 @@ case "${cmd}" in
 	qt-w64-up)
 		# Form the zip-filepath using the found or set Qt version.
 		zip_file="${temp_dir}/${qt_w64_filename}-${qt_ver}.zip"
+		# Upload file Windows Qt library.
+		curl \
+			--progress-bar \
+			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+			--upload-file "${zip_file}" \
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/"
+		;;
+
+	qt-w64-tools)
+		# Check if the Qt version library directory exists for Windows.
+		qt_w64_dir="$(realpath "${lib_dir}/Qt")/../../windows/Qt"
+		if [[ ! -d "${qt_w64_dir}/Tools" ]]; then
+			echo "Qt Tools directory '${qt_w64_dir}' does not exist!"
+			exit 1
+		fi
+		# Form the zip-filepath using the found or set Qt version.
+		zip_file="${temp_dir}/${qt_w64_tools_filename}.zip"
+		# Remove the current zip file.
+		[[ -f "${zip_file}" ]] && rm "${zip_file}"
+		# Change directory in order for zip to store the correct path.
+		pushd "${qt_w64_dir}"
+		# Zip all files except Windows executables.
+		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "Tools/"{mingw*,QtCreator}
+		popd
+		ls -lah "${zip_file}"
+		;;
+
+	qt-w64-tools-up)
+		# Form the zip-filepath using the found or set Qt version.
+		zip_file="${temp_dir}/${qt_w64_tools_filename}.zip"
 		# Upload file Windows Qt library.
 		curl \
 			--progress-bar \
