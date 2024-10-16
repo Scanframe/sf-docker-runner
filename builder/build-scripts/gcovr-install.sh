@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # On first error exit.
-set -ex
+set -e
 
 # Get the scripts directory.
 #script_dir="$(cd "$( dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -44,6 +44,8 @@ fi
 
 # Create script for global use.
 echo "Create gcov script for global use..."
+# Create directory when it does not exist yet.
+mkdir --parents "$(dirname "${cmd_file}")"
 cat <<EOF > "${cmd_file}" && chmod +x "${cmd_file}"
 #!/usr/bin/env bash
 source "${venv_dir}/bin/activate"
