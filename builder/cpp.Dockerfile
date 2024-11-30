@@ -54,7 +54,7 @@ RUN apt-get update && apt-get --yes upgrade && \
     apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" && \
     apt-get --yes install \
     locales sudo git make cmake ninja-build gcc-12 g++-12 g++-mingw-w64-x86-64 gdb-mingw-w64-target gdb valgrind clang-format chrpath dpkg-dev \
-    bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix \
+    bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix shfmt \
     libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev strace exiftool rpm nsis \
     x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 xvfb && \
     wget -q https://dl.winehq.org/wine-builds/winehq.key -O - | gpg --dearmor --output /etc/apt/trusted.gpg.d/winehq.gpg && \
@@ -109,10 +109,13 @@ User_Alias USERLIST = user\n\
 #RUN su user -c '/usr/bin/wineboot --init' && rm -rf /tmp/wine-*
 
 # Create '.profile' file in the home directory.
+# Changes the working directory when logging in using so when deamonized the
+# commands run using attach are also stzarting from the same working directory.
 RUN sudo --user=user -- printf "\
 if [ "\$BASH" ]; then\n\
   if [ -f ~/.bashrc ]; then\n\
     . ~/.bashrc\n\
+    work_dir=\"\$(ls -d /mnt/project/* | head -n 1)\";[[ -n \"\${work_dir}\" ]] && cd \"\${work_dir}\"\n\
   fi\n\
 fi\n\
 # set PATH so it includes user's private bin if it exists\n\
@@ -121,6 +124,9 @@ if [ -d \"\$HOME/bin\" ] ; then\n\
 fi\n\
 mesg n || true\n\
 " | tee "${HOME}/.profile" > "${HOME}/.bash_profile"
+
+
+
 
 # Create '.bashrc' file in the home directory.
 RUN sudo --user=user -- printf "\
@@ -131,7 +137,8 @@ umask 022\n\
 export LS_OPTIONS='--color=auto' WINEDLLOVERRIDES='mscoree=d'\n\
 alias la='ls \$LS_OPTIONS -A'\n\
 alias ll='ls \$LS_OPTIONS -alF'\n\
-alias l='ls $\LS_OPTIONS -CF'\n" > "${HOME}/.bashrc"
+alias l='ls $\LS_OPTIONS -CF'\n\
+" > "${HOME}/.bashrc"
 
 # Allow fuse by others.
 RUN sed -i -e 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
@@ -149,6 +156,7 @@ ADD "${NEXUS_RAW_LIB_URL}/qt-win-${QT_VERSION}.zip" "qt-win.zip"
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
 # Remove wine temporary directories '/tmp/wine-*' at the end to allow running as a different.
+# TODO: Maybe use command "winecfg /v win10" sets the Windows version for this wine instance but does not use a GUI at all.
 ENV WINEPREFIX="/opt/wine-prefix"
 RUN (Xvfb :10 -screen 0 1024x768x24 &) && \
     sudo mkdir "${WINEPREFIX}" && sudo chown user:user "${WINEPREFIX}" && \

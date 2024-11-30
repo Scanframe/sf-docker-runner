@@ -86,15 +86,8 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	WriteLog "Working directory: $(pwd)"
 	# Execute CMD passed by the user when starting the image.
 	if [[ $# -ne 0 ]]; then
-		# Hack to set LD_LIBRARY_PATH when needed.
-		exec_script="$(realpath "$(dirname "${1}")/../lnx-exec.sh")"
-		if [[ -f "${exec_script}" ]]; then
-			WriteLog "Calling execution script: '${exec_script}'" "${@}"
-			sudo --user=user --chdir="$(pwd)" -- "${exec_script}" "${@}"
-		else
-			WriteLog "Calling command:" "${@}"
-			sudo --user=user --chdir="$(pwd)" -- "${@}"
-		fi
+		WriteLog "Calling command:" "${@}"
+		sudo --user=user --chdir="$(pwd)" -- "${@}"
 	else
 		WriteLog "No command and logging in as user."
 		sudo --user=user --chdir="$(pwd)" --login

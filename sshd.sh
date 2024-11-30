@@ -5,7 +5,7 @@ script_dir="$(cd "$(dirname "${0}")" && pwd)"
 # Set the base image name of the FROM statement used.
 base_img_name="ubuntu:22.04"
 # Set the image name to be used.
-img_name="sshd:dev"
+img_name="sshd:./cpp	"
 # Set container name to be used.
 container_name="sshd"
 # Hostname of the container.
@@ -18,7 +18,7 @@ function ShowHelp {
 	# Get only the filename of the current script.
 	cmd_name="$(basename "${0}")"
 	echo "Usage: ${cmd_name} [<options>] [start | stop | run | mc]
-  Execute a PHP docker commands for server and command-line control.
+  Execute docker commands for server and command-line control.
 
   Options:
     -h, --help    : Show this help.
@@ -29,12 +29,7 @@ function ShowHelp {
     start  : Runs the docker server container in the background as a daemon.
     stop   : Stops the server running in the background.
     kill   : Kills the server running in the background.
-    login  : Creates a CLI configuration in the 'minio/config' directory adding
-             the host/alias named 'vps'.
-    bash   : Like login but the entrypoint is '/bin/bash' to investigate errors.
-    mc     : Runs the Minio CLI command.
-             To list entries on host 'vps': '$(basename "$0") -- ls -r vps'.
-             To remove entries on host 'vps': '$(basename "$0") -- ls -r vps/my-bucket/my-path'.
+    attach : Like login but the entrypoint is '/bin/bash' to investigate errors.
 "
 }
 
@@ -55,7 +50,7 @@ work_dir="$(realpath "${script_dir}")/sshd"
 docker_file="${work_dir}/sshd.Dockerfile"
 
 # Parse options.
-temp=$(getopt -o 'h' --long 'help' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hp:' --long 'help,project:' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	ShowHelp
