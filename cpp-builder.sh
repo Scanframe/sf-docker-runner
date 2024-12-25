@@ -8,7 +8,9 @@ script_dir="$(cd "$(dirname "${0}")" && pwd)"
 # Set the base image tag of the FROM statement used.
 base_img_tag="24.04"
 # Set the base image name of the FROM statement used.
-base_img_name="ubuntu"
+base_img_name="amd64/ubuntu"
+# Default platform for this.
+platform="amd64"
 # The image tag for displaying in help for now.
 img_tag="${base_img_tag}-<qt-ver>"
 # Set the image name to be used.
@@ -23,8 +25,15 @@ temp_dir="$(dirname "$(mktemp tmp.XXXXXXXXXX -ut)")"
 lib_dir="${HOME}/lib"
 # Offset of the Nexus server URL to the zipped libraries.
 raw_lib_offset="repository/shared/library"
-# Initialize empty Qt version library to use.
-qt_ver=""
+# Initialize Qt version library to find the highest version available.
+qt_ver='max'
+# When running from a 'aarch64' machine set some other defaults.
+if [[ "$(uname -m)" == 'aarch64' ]]; then
+  base_img_name='arm64v8/ubuntu'
+  platform='arm64'
+  # For now no Qt library yet.
+  qt_ver=''
+fi
 
 # Prints the help.
 #
@@ -38,7 +47,9 @@ function ShowHelp {
   Options:
     -h, --help    : Show this help.
     -p, --project : Project directory which is mounted in '/mnt/project' and has a symlink '~/project'.
-    --base-ver    : Version/tag of the base image which defaults to '${base_img_tag}' for image '${base_img_name}'.
+    --base-image  : Defaults to '${base_img_name}' available is also 'arm64v8/ubuntu'.
+    --base-ver    : Version/tag of the base image which defaults to '${base_img_tag}' for base image '${base_img_name}'.
+    --platform    : Platform defaults to '${platform}' available is also 'arm64'.
     --qt-ver      : Version of the the Qt library to instead of newest one available.
 
   Commands:
@@ -48,13 +59,13 @@ function ShowHelp {
     base-pull       : Pulls the base image '${base_img_name}:${base_img_tag}' and tags it for the self-hosted docker registry.
     base-push       : Pulls the base image '${base_img_name}:${base_img_tag}' when not there and pushes it to the self-hosted Nexus docker registry.
     qt-lnx          : Generates the 'qt-lnx.zip' from the current user's Linux Qt library.
-    qt-win          : Generates the qt-win.zip from the current user's Cross Windows Qt library.
-    qt-w64          : Generates the qt-w64.zip from the Windows Qt library relative to the current user's Qt.
-    qt-w64-tools    : Generates the qt-tools.zip from the Windows Qt library relative to the current user's Qt.
-    qt-lnx-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-lnx-<qt-ver>.zip'.
-    qt-win-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-win-<qt-ver>.zip'.
-    qt-w64-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-w64-<qt-ver>.zip'.
-    qt-w64-tools-up : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt-w64-tools.zip'.
+    qt-win          : Generates the 'qt-win.zip' from the current user's Cross Windows Qt library.
+    qt-w64          : Generates the 'qt-w64.zip' from the Windows Qt library relative to the current user's Qt.
+    qt-w64-tools    : Generates the 'qt-tools.zip' from the Windows Qt library relative to the current user's Qt.
+    qt-lnx-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/<platform>/qt-lnx-<qt-ver>.zip'.
+    qt-win-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/<platform>/qt-win-<qt-ver>.zip'.
+    qt-w64-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/<platform>/qt-w64-<qt-ver>.zip'.
+    qt-w64-tools-up : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/<platform>/qt-w64-tools.zip'.
     run             : Runs the docker container named '${container_name}' in the foreground mounting the passed project directory using the host's X-server.
     runx            : Same as 'runx' using a fake X-server.
     stop            : Stops the container named '${container_name}' running in the background.
@@ -65,6 +76,14 @@ function ShowHelp {
     versions        : Shows versions of most installed applications within the container.
     docker-push     : Push '${container_name}' to userspace '${DOCKER_USER}' on docker.com."
     "${script_dir}/nexus-docker.sh" --help-short
+	echo "  Examples:
+    ARM 64-bit no Qt library installed.
+     ./${cmd_name} --base-image arm64v8/ubuntu --platform arm64 --qt-ver '' build
+    AMD 64-bit with Qt max available version library installed.
+     ./${cmd_name} build
+    The same as above but not using the defaults.
+      ./${cmd_name} --base-image amd64/ubuntu --platform amd64 --qt-ver 'max' build
+"
 }
 
 # When no arguments or options are given show the help.
@@ -99,7 +118,7 @@ qt_w64_tools_filename="qt-w64-tools"
 cd "${script_dir}" || exit 1
 
 # Parse options.
-temp=$(getopt -o 'hp:' --long 'help,project:,base-ver:,qt-ver:' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hp:' --long 'help,platform:,base-image:,project:,base-ver:,qt-ver:' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	ShowHelp
@@ -116,8 +135,20 @@ while true; do
 			exit 0
 			;;
 
+		--base-image)
+			base_img_name="${2}"
+			shift 2
+			continue
+			;;
+
 		--base-ver)
 			base_img_tag="${2}"
+			shift 2
+			continue
+			;;
+
+		--platform)
+			platform="${2}"
 			shift 2
 			continue
 			;;
@@ -151,7 +182,7 @@ while true; do
 done
 
 # When no Qt version given find the newest one.
-if [[ -z "${qt_ver}" ]]; then
+if [[ "${qt_ver}" == 'max' ]]; then
 	qt_ver="$(basename "$(find "${lib_dir}/Qt/" -maxdepth 1 -type d -regex ".*\/[0-9]\\.[0-9]+\\.[0-9]+$" | sort --reverse --version-sort | head -n 1)")"
 	if [[ -z "${qt_ver}" ]]; then
 		echo "No Qt version directory found in '${lib_dir}/Qt'!"
@@ -159,7 +190,11 @@ if [[ -z "${qt_ver}" ]]; then
 fi
 
 # Assign the correct image tag.
-img_tag="${base_img_tag}-${qt_ver}"
+if [[ -n "${qt_ver}" ]]; then
+	img_tag="${base_img_tag}-${qt_ver}"
+else
+	img_tag="${base_img_tag}"
+fi
 
 # Get the subcommand.
 cmd=""
@@ -171,14 +206,21 @@ fi
 case "${cmd}" in
 
 	base-pull)
-		docker pull "${base_img_name}:${base_img_tag}"
+		dckr_cmd=(docker)
+		dckr_cmd+=(pull)
+		dckr_cmd+=(--platform "linux/${platform}")
+		dckr_cmd+=("${base_img_name}:${base_img_tag}")
+		"${dckr_cmd[@]}"
 		docker tag "${base_img_name}:${base_img_tag}" "${NEXUS_REPOSITORY}/${base_img_name}:${base_img_tag}"
 		;;
 
 	base-push)
-		docker pull "${base_img_name}:${base_img_tag}"
-		docker tag "${base_img_name}:${base_img_tag}" "${NEXUS_REPOSITORY}/${base_img_name}:${base_img_tag}"
-		docker image push "${NEXUS_REPOSITORY}/${base_img_name}:${base_img_tag}"
+		dckr_cmd=(docker)
+		dckr_cmd+=(image)
+		dckr_cmd+=(push)
+		#dckr_cmd+=(--platform "linux/${platform}")
+		dckr_cmd+=("${NEXUS_REPOSITORY}/${base_img_name}:${base_img_tag}")
+		"${dckr_cmd[@]}"
 		;;
 
 	qt-lnx)
@@ -206,7 +248,7 @@ case "${cmd}" in
 			--progress-bar \
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			--upload-file "${zip_file}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/"
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/${platform}/"
 		;;
 
 	qt-win)
@@ -235,7 +277,7 @@ case "${cmd}" in
 			--progress-bar \
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			--upload-file "${zip_file}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/"
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/${platform}/"
 		;;
 
 	qt-w64)
@@ -265,7 +307,7 @@ case "${cmd}" in
 			--progress-bar \
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			--upload-file "${zip_file}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/"
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/${platform}/"
 		;;
 
 	qt-w64-tools)
@@ -295,20 +337,20 @@ case "${cmd}" in
 			--progress-bar \
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			--upload-file "${zip_file}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/"
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/${platform}/"
 		;;
 
 	push)
 		# Add tag to having the correct prefix so it can be pushed to a private repository.
-		docker tag "${NEXUS_REPOSITORY}/${img_name}:${img_tag}" "${img_name}:${img_tag}"
+		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${platform}/${img_name}:${img_tag}"
 		# Push the repository.
-		docker image push "${NEXUS_REPOSITORY}/${img_name}:${img_tag}"
+		docker image push "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}"
 		;;
 
 	docker-push)
 		docker_img_name="${DOCKER_USER}/${img_name%%:*}"
 		# Add tag to having the correct prefix so it can be pushed to a private repository.
-		docker tag "${NEXUS_REPOSITORY}/${img_name}:${img_tag}" "${docker_img_name}"
+		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${platform}/${docker_img_name}"
 		# Push the repository.
 		docker image push "${docker_img_name}"
 		;;
@@ -317,40 +359,38 @@ case "${cmd}" in
 		# Logout from any current server.
 		docker logout
 		# Pull the image from the Nexus server.
-		docker pull "${NEXUS_REPOSITORY}/${img_name}:${img_tag}"
+		docker pull "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}"
 		# Add tag without the Nexus server prefix.
-		docker tag "${NEXUS_REPOSITORY}/${img_name}:${img_tag}" "${img_name}:${img_tag}"
+		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${platform}/${img_name}:${img_tag}"
 		;;
 
 	build | buildx)
 		# Stop all containers using this image.
 		# shellcheck disable=SC2046
-		if [[ -n "$(docker ps -a -q --filter ancestor="${img_name}:${img_tag}")" ]]; then
-			echo "Stopping containers using image '${img_name}:${img_tag}'."
-			docker stop $(docker ps -a -q --filter ancestor="${img_name}:${img_tag}")
+		if [[ -n "$(docker ps -a -q --filter ancestor="${platform}/${img_name}:${img_tag}")" ]]; then
+			echo "Stopping containers using image '${platform}/${img_name}:${img_tag}'."
+			docker stop $(docker ps -a -q --filter ancestor="${platform}/${img_name}:${img_tag}")
 		fi
 		build_args=("BASE_IMG=${NEXUS_REPOSITORY}/${base_img_name}:${base_img_tag}")
+		build_args=("PLATFORM=${platform}")
 		build_args+=("NEXUS_SERVER_URL=${NEXUS_SERVER_URL}")
 		build_args+=("NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${raw_lib_offset}")
 		build_args+=("QT_VERSION=${qt_ver}")
 		# Build the image.
 		dckr_cmd=(docker)
 		dckr_cmd+=("${cmd}")
+		dckr_cmd+=(--platform "linux/${platform}")
 		dckr_cmd+=(--progress plain)
 		for arg in "${build_args[@]}"; do
 			dckr_cmd+=(--build-arg "${arg}")
 		done
-#		dckr_cmd+=(--build-arg "BASE_IMG=${NEXUS_REPOSITORY}/${base_img_name}:${base_img_tag}")
-#		dckr_cmd+=(--build-arg "NEXUS_SERVER_URL=${NEXUS_SERVER_URL}")
-#		dckr_cmd+=(--build-arg "NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${raw_lib_offset}")
-#		dckr_cmd+=(--build-arg "QT_VER=${qt_ver}")
 		dckr_cmd+=(--file "${docker_file}")
-		dckr_cmd+=(--tag "${img_name}:${img_tag}")
+		dckr_cmd+=(--tag "${platform}/${img_name}:${img_tag}")
 		dckr_cmd+=(--network host)
 		dckr_cmd+=("${work_dir}")
 		"${dckr_cmd[@]}"
 		# Add also the private repository tag.
-		docker tag "${img_name}:${img_tag}" "${NEXUS_REPOSITORY}/${img_name}:${img_tag}"
+		docker tag "${platform}/${img_name}:${img_tag}" "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}"
 		;;
 
 	versions)
@@ -369,6 +409,7 @@ case "${cmd}" in
 		dckr_cmd+=(--rm)
 		dckr_cmd+=(--interactive)
 		dckr_cmd+=(--tty)
+		dckr_cmd+=(--platform "linux/${platform}")
 		dckr_cmd+=(--device /dev/fuse)
 		dckr_cmd+=(--cap-add SYS_ADMIN)
 		dckr_cmd+=(--security-opt apparmor:unconfined)
@@ -388,9 +429,9 @@ case "${cmd}" in
 		dckr_cmd+=(--workdir "/mnt/project/")
 		if [[ "${cmd}" == "start" ]]; then
 			dckr_cmd+=(--detach)
-			"${dckr_cmd[@]}" "${img_name}:${img_tag}" sudo -- /usr/sbin/sshd -e -D -p 3022
+			"${dckr_cmd[@]}" "${platform}/${img_name}:${img_tag}" sudo -- /usr/sbin/sshd -e -D -p 3022
 		else
-			"${dckr_cmd[@]}" "${img_name}:${img_tag}" "${@}"
+			"${dckr_cmd[@]}" "${platform}/${img_name}:${img_tag}" "${@}"
 		fi
 		;;
 

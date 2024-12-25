@@ -10,35 +10,8 @@ LABEL \
 ## Let apt-get know we are running in noninteractive mode
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Use a mirror list as mirror server.
-#RUN sed -i -e 's/http:\/\/archive\.ubuntu\.com\/ubuntu\//mirror:\/\/mirrors\.ubuntu\.com\/mirrors\.txt/' /etc/apt/sources.list
-#RUN sed -i -e 's/http:\/\/archive\.ubuntu\.com\/ubuntu\//http:\/\/nl.archive.ubuntu.com\/ubuntu\//' /etc/apt/sources.list
-
-## Make sure image is up-to-date
-#RUN apt-get update && apt-get --yes upgrade
-#
-## Install the packages needed for adding other package repositories.
-#RUN apt-get --yes install wget curl gpg lsb-release software-properties-common
-#
-## Add the LVM tool chain as apt repository for the latest version.
-#RUN wget https://apt.llvm.org/llvm-snapshot.gpg.key -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
-#    echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc) main" > /etc/apt/sources.list.d/llvm-toolchain.list
-#
-## Add the KitWare package repository for cmake to get the lastest version.
-#RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
-#    apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
-#
-## Install all packages needed for all the tools.
-#RUN apt-get --yes install locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb clang-format \
-#    bindfs fuse-zip exif doxygen graphviz dialog jq recode default-jre-headless joe mc colordiff dos2unix
-#
-## Install needed libraries for building/compiling and packaging.
-#RUN apt-get --yes install libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev \
-#    strace exiftool rpm
-#
-## Install needed libraries for running a Qt GUI application.
-#RUN apt-get --yes install x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
-
+# Use '/bin/bash' instead of default '/bin/sh'.
+SHELL ["/bin/bash", "-c"]
 
 # Make sure image is up-to-date
 # Install wine 64-bit only and Wine HQ to get Wine version 9.0 eventually.
@@ -53,16 +26,24 @@ RUN apt-get update && apt-get --yes upgrade && \
     wget --quiet -O - "https://apt.kitware.com/keys/kitware-archive-latest.asc" | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
     apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" && \
     apt-get --yes install \
-    locales sudo git make cmake ninja-build gcc-12 g++-12 g++-mingw-w64-x86-64 gdb-mingw-w64-target gdb valgrind clang-format chrpath dpkg-dev \
+    locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb-mingw-w64-target gdb valgrind clang-format chrpath dpkg-dev \
     bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix shfmt \
-    libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev strace exiftool rpm nsis \
+    python3 python3-venv libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev strace exiftool rpm nsis \
     x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 xvfb && \
-    wget -q https://dl.winehq.org/wine-builds/winehq.key -O - | gpg --dearmor --output /etc/apt/trusted.gpg.d/winehq.gpg && \
-    apt-add-repository --uri "https://dl.winehq.org/wine-builds/$(lsb_release -is | tr '[:upper:]' '[:lower:]')/" --component main && \
-    dpkg --add-architecture i386 && apt-get --yes update && \
-    (apt-get --yes install --simulate winehq-stable && apt-get --yes install wine32:i386 wine64 winehq-stable || apt-get --yes install wine32:i386 wine64 wine) && \
-    apt-get --yes install python3 python3-venv && \
     apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*
+
+# Install Wine HQ when the machine is of 'x86_64'.
+RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
+      apt-get update && \
+      wget -q https://dl.winehq.org/wine-builds/winehq.key -O - | gpg --dearmor --output /etc/apt/trusted.gpg.d/winehq.gpg && \
+      apt-add-repository --uri "https://dl.winehq.org/wine-builds/$(lsb_release -is | tr '[:upper:]' '[:lower:]')/" --component main && \
+      dpkg --add-architecture i386 && apt-get --yes update && \
+      ( \
+         apt-get --yes install --simulate winehq-stable && \
+         apt-get --yes install wine32:i386 wine64 winehq-stable || apt-get --yes install wine32:i386 wine64 wine \
+      ) && \
+      apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/* ; \
+    fi
 
 # Copy some needed scripts to the root bin directory.
 COPY bin/.profile /root/bin/.profile
@@ -72,12 +53,9 @@ RUN /root/bin/gcovr-install.sh
 
 # Qt requires locale UTF8.
 RUN echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen
-ENV LANG=en_US.UTF-8
-ENV LANGUAGE=en_US:en
-ENV LC_ALL=en_US.UTF-8
-
-# Use '/bin/bash' instead of default '/bin/sh'.
-SHELL ["/bin/bash", "-c"]
+ENV LANG="en_US.UTF-8"
+ENV LANGUAGE="en_US:en"
+ENV LC_ALL="en_US.UTF-8"
 
 # Set the working directory inside the container.
 # Also used to put the build context into.
@@ -125,9 +103,6 @@ fi\n\
 mesg n || true\n\
 " | tee "${HOME}/.profile" > "${HOME}/.bash_profile"
 
-
-
-
 # Create '.bashrc' file in the home directory.
 RUN sudo --user=user -- printf "\
 # Set some colors for the prompt.\n\
@@ -143,28 +118,32 @@ alias l='ls $\LS_OPTIONS -CF'\n\
 # Allow fuse by others.
 RUN sed -i -e 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
 
+# Platform building for.
+ARG PLATFORM="amd64"
+# Version of the Qt library and when empty do not install a Qt library at all.
+ARG QT_VERSION=""
 # Use the arguments to pass the library URL.
 ARG NEXUS_SERVER_URL
 ARG NEXUS_RAW_LIB_URL
-ARG QT_VERSION
 # Get the compressed Qt library.
-#RUN wget "${NEXUS_RAW_LIB_URL}/qt-lnx.zip" -O "qt-lnx.zip"
-ADD "${NEXUS_RAW_LIB_URL}/qt-lnx-${QT_VERSION}.zip" "qt-lnx.zip"
-# Get the compressed QtWin library.
-#RUN wget "${NEXUS_RAW_LIB_URL}/qt-win.zip" -O "qt-win.zip"
-ADD "${NEXUS_RAW_LIB_URL}/qt-win-${QT_VERSION}.zip" "qt-win.zip"
+RUN if [[ -n "${QT_VERSION}" ]]; then wget "${NEXUS_RAW_LIB_URL}/${PLATFORM}/qt-lnx-${QT_VERSION}.zip" -O "qt-lnx.zip"; fi
+# Get the compressed QtWin library only for the 'x86_64' machine.
+RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then wget "${NEXUS_RAW_LIB_URL}/${PLATFORM}/qt-win-${QT_VERSION}.zip" -O "qt-win.zip"; fi
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
 # Remove wine temporary directories '/tmp/wine-*' at the end to allow running as a different.
 # TODO: Maybe use command "winecfg /v win10" sets the Windows version for this wine instance but does not use a GUI at all.
 ENV WINEPREFIX="/opt/wine-prefix"
-RUN (Xvfb :10 -screen 0 1024x768x24 &) && \
+# Install Wine only on 'x86_64' machines.
+RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
+    (Xvfb :10 -screen 0 1024x768x24 &) && \
     sudo mkdir "${WINEPREFIX}" && sudo chown user:user "${WINEPREFIX}" && \
     sudo --user=user WINEPREFIX="${WINEPREFIX}" WINEDLLOVERRIDES="mscoree=d" DISPLAY=:10 wineboot && \
-    rm -rf /tmp/wine-*
+    rm -rf /tmp/wine-* ; \
+    fi
 
 # Copy the Windows registry files as a fix since no registry files are created during the build.
-RUN wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz" -O- | tar -C "${WINEPREFIX}" -xzf -
+RUN if [[ "$(uname -m)" == 'x86_64' ]]; then wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz" -O- | tar -C "${WINEPREFIX}" -xzf - ; fi
 
 # Ubuntu 24.04 has a default 'ubuntu' user.
 RUN userdel --remove ubuntu || exit 0
@@ -174,12 +153,15 @@ RUN usermod -aG sudo user
 
 # Create an 'import.reg' registry file for the 'entrypoint.sh' script to import since
 # somehow the Wine registry during a build does not work.
-RUN sudo --user=user -- printf "\
+RUN if [[ "$(uname -m)" == "x86_64" ]]; then \
+    sudo --user=user -- printf "\
 Windows Registry Editor Version 5.00\n\
 \n\
 [HKEY_CURRENT_USER\Environment]\n\
 \"PATH\"=\"C:\\\\\\python;C:\\\\\\python\\\\\\Scripts\"\n\
-\n" > "${HOME}/import.reg" # && sudo --user=user WINEPREFIX="${WINEPREFIX}" wine regedit "${HOME}/import.reg"
+\n" > "${HOME}/import.reg" ;\
+    fi
+# && sudo --user=user WINEPREFIX="${WINEPREFIX}" wine regedit "${HOME}/import.reg" \
 
 # Make sure the user inside the docker container has the same ID as the user outside
 COPY --chown="user:user" --chmod=755 bin/*.sh "${HOME}/bin/"

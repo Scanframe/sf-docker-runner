@@ -28,7 +28,7 @@ function ShowHelp {
 		echo -n "
   Command passed to 'nexus-docker.sh':"
   fi
-  echo -e "
+	echo -e "
     du          : Show docker disk usage.
     local       : Docker client list local images.
     list        : List remote images on Nexus server.
@@ -39,6 +39,9 @@ function ShowHelp {
     remove      : Removes a local image. (not implemented)
     wine-reg    : Compress registry files from common/wine-reg.
     wine-reg-up : Upload compressed registry files to Nexus raw repository.
+
+  Docker credentials are finally stored in: ${HOME}/.docker/config.json
+
 "
 }
 
