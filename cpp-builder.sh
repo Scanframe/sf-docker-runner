@@ -29,15 +29,15 @@ raw_lib_offset="repository/shared/library"
 qt_ver='max'
 # When running from a 'aarch64' machine set some other defaults.
 if [[ "$(uname -m)" == 'aarch64' ]]; then
-  base_img_name='arm64v8/ubuntu'
-  platform='arm64'
-  # For now no Qt library yet.
-  qt_ver=''
+	base_img_name='arm64v8/ubuntu'
+	platform='arm64'
+	# For now no Qt library yet.
+	qt_ver=''
 fi
 
 # Prints the help.
 #
-function ShowHelp {
+function show_help {
 	local cmd_name
 	# Get only the filename of the current script.
 	cmd_name="$(basename "${0}")"
@@ -75,7 +75,7 @@ function ShowHelp {
     attach          : Attaches to the  in the background running container named '${container_name}'.
     versions        : Shows versions of most installed applications within the container.
     docker-push     : Push '${container_name}' to userspace '${DOCKER_USER}' on docker.com."
-    "${script_dir}/nexus-docker.sh" --help-short
+	"${script_dir}/nexus-docker.sh" --help-short
 	echo "  Examples:
     ARM 64-bit no Qt library installed.
      ./${cmd_name} --base-image arm64v8/ubuntu --platform arm64 --qt-ver '' build
@@ -88,7 +88,7 @@ function ShowHelp {
 
 # When no arguments or options are given show the help.
 if [[ $# -eq 0 ]]; then
-	ShowHelp
+	show_help
 	exit 1
 fi
 
@@ -121,17 +121,17 @@ cd "${script_dir}" || exit 1
 temp=$(getopt -o 'hp:' --long 'help,platform:,base-image:,project:,base-ver:,qt-ver:' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
-	ShowHelp
+	show_help
 	exit 1
 fi
 
-eval set -- "$temp"
+eval set -- "${temp}"
 unset temp
 while true; do
 	case "$1" in
 
 		-h | --help)
-			ShowHelp
+			show_help
 			exit 0
 			;;
 
@@ -150,6 +150,14 @@ while true; do
 		--platform)
 			platform="${2}"
 			shift 2
+			# When the platform does not match the default base image modify it.
+			if [[ "${platform}" == 'arm64' && "${base_img_name}" =~ ^amd64 ]]; then
+				base_img_name='arm64v8/ubuntu'
+				echo "Defaulting platform '${platform}' to base image '${base_img_name}'."
+			elif [[ "${platform}" == 'amd64' && "${base_img_name}" =~ ^arm64 ]]; then
+				base_img_name='amd64/ubuntu'
+				echo "Defaulting platform '${platform}' to base image '${base_img_name}'."
+			fi
 			continue
 			;;
 
@@ -465,7 +473,7 @@ case "${cmd}" in
 			exit 0
 		fi
 		echo "Command '${cmd}' is invalid!"
-		ShowHelp
+		show_help
 		exit 1
 		;;
 

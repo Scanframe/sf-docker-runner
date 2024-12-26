@@ -24,11 +24,12 @@ function ShowHelp {
     -h, --help    : Show this help.
 
   Commands:"
-  else
+	else
 		echo -n "
   Command passed to 'nexus-docker.sh':"
-  fi
+	fi
 	echo -e "
+    required    : Installs the required dependent packages.
     du          : Show docker disk usage.
     local       : Docker client list local images.
     list        : List remote images on Nexus server.
@@ -43,6 +44,45 @@ function ShowHelp {
   Docker credentials are finally stored in: ${HOME}/.docker/config.json
 
 "
+}
+
+# Installs required packages.
+#
+function install_required {
+	local pkgs pkg sources_file
+	# Packages needed to be installed.
+	pkgs=("docker-ce" "qemu-user-static")
+	# Iterate through the packages one by one. ()
+	for pkg in "${pkgs[@]}"; do
+		# Check if a package is installed by checking the package listing string.
+		if [[ "$(apt -qq list "${pkg}" 2>/dev/null | head -n 1)" =~ (\[installed\]) ]]; then
+			echo "Package '${pkg}' already installed..."
+			continue
+		fi
+		# Docker CE needs its own repository.
+		if [[ "${pkg}" == "docker-ce" ]]; then
+			# Check if the sources file exists when not create it.
+			sources_file="/etc/apt/sources.list.d/docker-ce.sources"
+			if [[ ! -f "${sources_file}" ]]; then
+				echo "Installing file: ${sources_file}"
+				# Create the sources file.
+				cat <<EOD | sudo tee "${sources_file}" >/dev/null
+Types: deb
+URIs: https://download.docker.com/linux/$(lsb_release -is | tr '[:upper:]' '[:lower:]')
+Suites: $(lsb_release -cs)
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By:
+$(wget -qO- "https://download.docker.com/linux/$(lsb_release -is | tr '[:upper:]' '[:lower:]')/gpg" | sed 's/^/ /')
+EOD
+			fi
+		fi
+		# Perform the install of the package.
+		if ! apt-get --yes install "${pkg}"; then
+			echo "Install of package '${pkg}' failed!"
+			exit 1
+		fi
+	done
 }
 
 # When no arguments or options are given show the help.
@@ -105,6 +145,10 @@ if [[ $# -gt 0 ]]; then
 fi
 
 case "${cmd}" in
+
+	required)
+		install_required
+		;;
 
 	du)
 		docker system df
