@@ -78,7 +78,7 @@ EOD
 			fi
 		fi
 		# Perform the install of the package.
-		if ! apt-get --yes install "${pkg}"; then
+		if ! sudo apt-get --yes install "${pkg}"; then
 			echo "Install of package '${pkg}' failed!"
 			exit 1
 		fi

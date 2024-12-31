@@ -18,7 +18,7 @@ SHELL ["/bin/bash", "-c"]
 # Also add 'xvfb' to create a fake X-server to run and install Wine properly.
 # Packge winehq-stable is not yet available for Ubuntu version 24.04 so there is a workaround when it does.
 RUN apt-get update && apt-get --yes upgrade && \
-    apt-get --yes install wget curl gpg lsb-release software-properties-common iproute2 iputils-ping binutils openssh-server && \
+    apt-get --yes install wget curl zip gpg lsb-release software-properties-common iproute2 iputils-ping binutils openssh-server && \
     mkdir /run/sshd && \
     add-apt-repository --yes --no-update ppa:git-core/ppa && \
     wget --quiet "https://apt.llvm.org/llvm-snapshot.gpg.key" -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
@@ -26,10 +26,11 @@ RUN apt-get update && apt-get --yes upgrade && \
     wget --quiet -O - "https://apt.kitware.com/keys/kitware-archive-latest.asc" | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
     apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" && \
     apt-get --yes install \
-    locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb-mingw-w64-target gdb valgrind clang-format chrpath dpkg-dev \
+    locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb-mingw-w64-target ccache gdb valgrind clang-format chrpath dpkg-dev \
     bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix shfmt \
-    python3 python3-venv libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev strace exiftool rpm nsis \
-    x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 xvfb && \
+    python3 python3-venv libopengl0 libgl1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev strace \
+    exiftool rpm nsis x11-apps xcb libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 \
+    libxcb-keysyms1 libxcb-render-util0 xvfb libpcre2-16-0 && \
     apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*
 
 # Install Wine HQ when the machine is of 'x86_64'.
@@ -93,7 +94,8 @@ RUN sudo --user=user -- printf "\
 if [ "\$BASH" ]; then\n\
   if [ -f ~/.bashrc ]; then\n\
     . ~/.bashrc\n\
-    work_dir=\"\$(ls -d /mnt/project/* | head -n 1)\";[[ -n \"\${work_dir}\" ]] && cd \"\${work_dir}\"\n\
+    work_dir=\"\$(find /mnt/project -maxdepth 1 -type d | tail -n 1)\";\n\
+    [[ -n \"\${work_dir}\" ]] && cd \"\${work_dir}\"\n\
   fi\n\
 fi\n\
 # set PATH so it includes user's private bin if it exists\n\
@@ -126,9 +128,9 @@ ARG QT_VERSION=""
 ARG NEXUS_SERVER_URL
 ARG NEXUS_RAW_LIB_URL
 # Get the compressed Qt library.
-RUN if [[ -n "${QT_VERSION}" ]]; then wget "${NEXUS_RAW_LIB_URL}/${PLATFORM}/qt-lnx-${QT_VERSION}.zip" -O "qt-lnx.zip"; fi
-# Get the compressed QtWin library only for the 'x86_64' machine.
-RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then wget "${NEXUS_RAW_LIB_URL}/${PLATFORM}/qt-win-${QT_VERSION}.zip" -O "qt-win.zip"; fi
+RUN if [[ -n "${QT_VERSION}" ]]; then wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}.zip" -O "qt-lnx-$(uname -m).zip";  fi
+# Get the compressed QtWin library only for the 'x86_64' machines.
+RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-$(uname -m)-${QT_VERSION}.zip" -O "qt-win-$(uname -m).zip"; fi
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
 # Remove wine temporary directories '/tmp/wine-*' at the end to allow running as a different.

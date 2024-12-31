@@ -22,7 +22,7 @@ hostname="cpp-builder"
 # Get temporary directory of this OS.
 temp_dir="$(dirname "$(mktemp tmp.XXXXXXXXXX -ut)")"
 # Location of the libraries (Qt)
-lib_dir="${HOME}/lib"
+qt_lib_dir="${HOME}/lib/qt"
 # Offset of the Nexus server URL to the zipped libraries.
 raw_lib_offset="repository/shared/library"
 # Initialize Qt version library to find the highest version available.
@@ -31,9 +31,9 @@ qt_ver='max'
 if [[ "$(uname -m)" == 'aarch64' ]]; then
 	base_img_name='arm64v8/ubuntu'
 	platform='arm64'
-	# For now no Qt library yet.
-	qt_ver=''
 fi
+# Set the default architecture.
+architecture="$(uname -m)"
 
 # Prints the help.
 #
@@ -62,10 +62,10 @@ function show_help {
     qt-win          : Generates the 'qt-win.zip' from the current user's Cross Windows Qt library.
     qt-w64          : Generates the 'qt-w64.zip' from the Windows Qt library relative to the current user's Qt.
     qt-w64-tools    : Generates the 'qt-tools.zip' from the Windows Qt library relative to the current user's Qt.
-    qt-lnx-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/<platform>/qt-lnx-<qt-ver>.zip'.
-    qt-win-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/<platform>/qt-win-<qt-ver>.zip'.
-    qt-w64-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/<platform>/qt-w64-<qt-ver>.zip'.
-    qt-w64-tools-up : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/<platform>/qt-w64-tools.zip'.
+    qt-lnx-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-lnx-<architecture>-<qt-ver>.zip'.
+    qt-win-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-win-<architecture>-<qt-ver>.zip'.
+    qt-w64-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-<architecture>-<qt-ver>.zip'.
+    qt-w64-tools-up : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-tools.zip'.
     run             : Runs the docker container named '${container_name}' in the foreground mounting the passed project directory using the host's X-server.
     runx            : Same as 'runx' using a fake X-server.
     stop            : Stops the container named '${container_name}' running in the background.
@@ -105,14 +105,6 @@ project_dir="$(realpath "${script_dir}")/project"
 work_dir="$(realpath "${script_dir}")/builder"
 # The absolute docker file location.
 docker_file="${work_dir}/cpp.Dockerfile"
-# Base zip-file name containing the Linux Qt library.
-qt_lnx_filename="qt-lnx"
-# Base zip-file name containing the Windows Qt library.
-qt_win_filename="qt-win"
-# Base zip-file name containing the Windows Qt library.
-qt_w64_filename="qt-w64"
-# Base zip-file name containing the Windows Qt library.
-qt_w64_tools_filename="qt-w64-tools"
 
 # Change to the current script directory.
 cd "${script_dir}" || exit 1
@@ -191,9 +183,11 @@ done
 
 # When no Qt version given find the newest one.
 if [[ "${qt_ver}" == 'max' ]]; then
-	qt_ver="$(basename "$(find "${lib_dir}/Qt/" -maxdepth 1 -type d -regex ".*\/[0-9]\\.[0-9]+\\.[0-9]+$" | sort --reverse --version-sort | head -n 1)")"
+	qt_ver="$(basename "$(find "${qt_lib_dir}/lnx-${architecture}/" -maxdepth 1 -type d -regex ".*\/[0-9]\\.[0-9]+\\.[0-9]+$" | sort --reverse --version-sort | head -n 1)")"
 	if [[ -z "${qt_ver}" ]]; then
-		echo "No Qt version directory found in '${lib_dir}/Qt'!"
+		echo "No Qt version directory found in '${qt_lib_dir}/lnx-${architecture}'!"
+	else
+		echo "Qt version '${qt_ver}' found in directory '${qt_lib_dir}/lnx-${architecture}'!"
 	fi
 fi
 
@@ -233,16 +227,17 @@ case "${cmd}" in
 
 	qt-lnx)
 		# Check if the Qt version library directory exists.
-		if [[ ! -d "${lib_dir}/Qt/${qt_ver}" ]]; then
-			echo "Qt version directory '${lib_dir}/Qt/${qt_ver}' does not exist!"
+		ver_dir="${qt_lib_dir}/lnx-${architecture}/${qt_ver}"
+		if [[ ! -d "${ver_dir}" ]]; then
+			echo "Qt version directory '${ver_dir}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${qt_lnx_filename}-${qt_ver}.zip"
+		zip_file="${temp_dir}/qt-lnx-${architecture}-${qt_ver}.zip"
 		# Remove the current zip file.
 		[[ -f "${zip_file}" ]] && rm "${zip_file}"
 		# Change directory in order for zip to store the correct path.
-		pushd "${lib_dir}/Qt"
+		pushd "${qt_lib_dir}/lnx-${architecture}/"
 		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}/gcc_64/"{bin,lib,include,libexec,mkspecs,plugins}
 		popd
 		ls -lah "${zip_file}"
@@ -250,27 +245,28 @@ case "${cmd}" in
 
 	qt-lnx-up)
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${qt_lnx_filename}-${qt_ver}.zip"
+		zip_file="${temp_dir}/qt-lnx-${architecture}-${qt_ver}.zip"
 		# Upload file Linux Qt library.
 		curl \
 			--progress-bar \
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			--upload-file "${zip_file}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/${platform}/"
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/qt/"
 		;;
 
 	qt-win)
-		# Check if the Qt version library directory exists for Windows.
-		if [[ ! -d "${lib_dir}/Qt/${qt_ver}" ]]; then
-			echo "Qt version directory '${lib_dir}/QtWin/${qt_ver}' does not exist!"
+		# Check if the Qt version library directory exists.
+		ver_dir="${qt_lib_dir}/win-${architecture}/${qt_ver}"
+		if [[ ! -d "${ver_dir}" ]]; then
+			echo "Qt version directory '${ver_dir}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${qt_win_filename}-${qt_ver}.zip"
+		zip_file="${temp_dir}/qt-win-${architecture}-${qt_ver}.zip"
 		# Remove the current zip file.
 		[[ -f "${zip_file}" ]] && rm "${zip_file}"
 		# Change directory in order for zip to store the correct path.
-		pushd "${lib_dir}/QtWin"
+		pushd "${qt_lib_dir}/win-${architecture}/"
 		# Zip all files except Windows executables.
 		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}/mingw_64/"{bin,lib,include,libexec,mkspecs,plugins} -x '*.exe'
 		popd
@@ -279,24 +275,24 @@ case "${cmd}" in
 
 	qt-win-up)
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${qt_win_filename}-${qt_ver}.zip"
-		# Upload file Windows Qt library.
+		zip_file="${temp_dir}/qt-win-${architecture}-${qt_ver}.zip"
+		# Upload file Linux Qt library.
 		curl \
 			--progress-bar \
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			--upload-file "${zip_file}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/${platform}/"
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/qt/"
 		;;
 
 	qt-w64)
 		# Check if the Qt version library directory exists for Windows.
-		qt_w64_dir="$(realpath "${lib_dir}/Qt")/../../windows/Qt"
+		qt_w64_dir="$(realpath "${qt_lib_dir}/lnx-${architecture}")/../../windows/Qt"
 		if [[ ! -d "${qt_w64_dir}/${qt_ver}" ]]; then
 			echo "Qt version directory '${qt_w64_dir}/${qt_ver}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${qt_w64_filename}-${qt_ver}.zip"
+		zip_file="${temp_dir}/qt-w64-${architecture}-${qt_ver}.zip"
 		# Remove the current zip file.
 		[[ -f "${zip_file}" ]] && rm "${zip_file}"
 		# Change directory in order for zip to store the correct path.
@@ -309,24 +305,24 @@ case "${cmd}" in
 
 	qt-w64-up)
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${qt_w64_filename}-${qt_ver}.zip"
+		zip_file="${temp_dir}/qt-w64-${architecture}-${qt_ver}.zip"
 		# Upload file Windows Qt library.
 		curl \
 			--progress-bar \
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			--upload-file "${zip_file}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/${platform}/"
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/qt6/"
 		;;
 
 	qt-w64-tools)
 		# Check if the Qt version library directory exists for Windows.
-		qt_w64_dir="$(realpath "${lib_dir}/Qt")/../../windows/Qt"
+		qt_w64_dir="$(realpath "${qt_lib_dir}/lnx-${architecture}")/../../windows/Qt"
 		if [[ ! -d "${qt_w64_dir}/Tools" ]]; then
 			echo "Qt Tools directory '${qt_w64_dir}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${qt_w64_tools_filename}.zip"
+		zip_file="${temp_dir}/qt-w64-tools.zip"
 		# Remove the current zip file.
 		[[ -f "${zip_file}" ]] && rm "${zip_file}"
 		# Change directory in order for zip to store the correct path.
@@ -339,13 +335,13 @@ case "${cmd}" in
 
 	qt-w64-tools-up)
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${qt_w64_tools_filename}.zip"
+		zip_file="${temp_dir}/qt-w64-tools.zip"
 		# Upload file Windows Qt library.
 		curl \
 			--progress-bar \
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			--upload-file "${zip_file}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/${platform}/"
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/qt/"
 		;;
 
 	push)
@@ -380,7 +376,7 @@ case "${cmd}" in
 			docker stop $(docker ps -a -q --filter ancestor="${platform}/${img_name}:${img_tag}")
 		fi
 		build_args=("BASE_IMG=${NEXUS_REPOSITORY}/${base_img_name}:${base_img_tag}")
-		build_args=("PLATFORM=${platform}")
+		build_args+=("PLATFORM=${platform}")
 		build_args+=("NEXUS_SERVER_URL=${NEXUS_SERVER_URL}")
 		build_args+=("NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${raw_lib_offset}")
 		build_args+=("QT_VERSION=${qt_ver}")
@@ -434,6 +430,7 @@ case "${cmd}" in
 			dckr_cmd+=(--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro")
 		fi
 		dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
+		dckr_cmd+=(--volume "${script_dir}:/mnt/script:ro")
 		dckr_cmd+=(--workdir "/mnt/project/")
 		if [[ "${cmd}" == "start" ]]; then
 			dckr_cmd+=(--detach)

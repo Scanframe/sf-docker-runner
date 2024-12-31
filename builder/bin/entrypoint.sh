@@ -6,6 +6,9 @@ function WriteLog {
 	fi
 }
 
+# Fixing the warning message 'unable to resolve host ???'.
+echo "127.0.1.1  $(cat /etc/hostname)" | sudo tee --append /etc/hosts >/dev/null
+
 # Report the current command to stderr
 WriteLog "Entrypoint($(id -u)):" "${@}"
 
@@ -48,39 +51,29 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			sudo --user=user wine regedit "${HOME}/import.reg" 2>/dev/null
 		fi
 	fi
-	# Check if the Qt library is available.
-	if [[ -d "/usr/local/lib/Qt" ]]; then
+	# Check if the Qt zipped libraries are available.
+	if [[ -d "/usr/local/lib/qt" ]]; then
 		WriteLog "Qt zipped library is available."
 		mkdir --parents "${HOME}/lib"
-		ln -s "/usr/local/lib/Qt" "${HOME}/lib/Qt"
+		ln -s "/usr/local/lib/qt" "${HOME}/lib/qt"
 	else
-		qt_lnx_zip="${HOME}/qt-lnx.zip"
-		if [[ -f "${qt_lnx_zip}" ]]; then
-			mkdir --parents "${HOME}/lib/Qt"
-			if ! fuse-zip -o ro,nonempty,allow_other "${qt_lnx_zip}" "${HOME}/lib/Qt"; then
-				WriteLog "Mounting Qt library zip-file '${qt_lnx_zip}' onto '${HOME}/lib/Qt' failed!"
-				exit 1
-			else
-				WriteLog "Qt zipped library is mounted on '${HOME}/lib/Qt'."
+		# Iterate through all the qt-*.zip files and mount them at the correct places.
+		for zip_file in ls "${HOME}/qt-"*.zip; do
+			if [[ "$(basename "${zip_file}")" =~ ^qt-((lnx|win)-([a-z_0-9]*))\.zip$ ]]; then
+				mount_dir="${HOME}/lib/qt/${BASH_REMATCH[1]}"
+				if mkdir --parent "${mount_dir}"; then
+					# Hack for fixing symlinks used referring to Qt.
+					if [[ "${BASH_REMATCH[1]}" == 'lnx-x86_64' ]]; then
+						ln -rs "${mount_dir}" "${mount_dir}/../Qt"
+					fi
+					if ! fuse-zip -o ro,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
+						WriteLog "Mounting Qt library zip-file '${zip_file}' onto '${mount_dir}' failed!"
+					else
+						WriteLog "Qt zipped '${BASH_REMATCH[2]}' library is mounted on '${mount_dir}'."
+					fi
+				fi
 			fi
-		fi
-	fi
-	# Check if the QtWin library is available.
-	if [[ -d "/usr/local/lib/QtWin" ]]; then
-		WriteLog "QtWin library is available."
-		mkdir --parents "${HOME}/lib"
-		ln -s "/usr/local/lib/QtWin" "${HOME}/lib/QtWin"
-	else
-		qt_lnx_zip="${HOME}/qt-win.zip"
-		if [[ -f "${qt_lnx_zip}" ]]; then
-			mkdir --parents "${HOME}/lib/QtWin"
-			if ! fuse-zip -o ro,nonempty,allow_other "${qt_lnx_zip}" "${HOME}/lib/QtWin"; then
-				WriteLog "Mounting QtWin library zip-file '${qt_lnx_zip}' onto '${HOME}/lib/QtWin' failed!"
-				exit 1
-			else
-				WriteLog "QtWin zipped library is mounted on '${HOME}/lib/QtWin'."
-			fi
-		fi
+		done
 	fi
 
 	WriteLog "Working directory: $(pwd)"
@@ -93,7 +86,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		sudo --user=user --chdir="$(pwd)" --login
 	fi
 # When the current user is 'user' execute the script using sudo.
-elif [[ "$(id -nu)" == "user" ]] ; then
+elif [[ "$(id -nu)" == "user" ]]; then
 	# Execute this script but now as root passing the environment variables.
 	sudo -E "${0}" "${@}" || exit 1
 else
