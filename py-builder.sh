@@ -5,14 +5,23 @@ set -e
 
 # Get the script directory.
 script_dir="$(cd "$(dirname "${0}")" && pwd)"
+# Set the base image tag of the FROM statement used.
+base_img_tag="24.04"
+# Default platform for this.
+platform="amd64"
 # Set the base image name of the FROM statement used.
-base_img_name="ubuntu:22.04"
+base_img_name="amd64/ubuntu:${base_img_tag}"
 # Set the image name to be used.
 img_name="python:dev"
 # Set container name to be used.
 container_name="python"
 # Offset of the Nexus server URL to the zipped libraries.
 raw_lib_offset="repository/shared/library"
+# When running from a 'aarch64' machine set some other defaults.
+if [[ "$(uname -m)" == 'aarch64' ]]; then
+	base_img_name="arm64v8/ubuntu:${base_img_tag}"
+	platform="arm64"
+fi
 
 # Prints the help.
 #
@@ -26,9 +35,10 @@ function ShowHelp {
   Options:
     -h, --help    : Show this help.
     -p, --project : Project directory which is mounted in '/mnt/project' and has a symlink '~/project'.
+    --platform    : Platform defaults to '${platform}' available is also 'arm64'.
 
   Commands:
-    build     : Builds the docker image tagged '${img_name}' for self-hosted Nexus repository and requires zipped Qt libraries.
+    build     : Builds the docker image named '${platform}/${img_name}' for self-hosted Nexus repository and requires zipped Qt libraries.
     push      : Pushes the docker image to the self-hosted Nexus repository.
     pull      : Pulls the docker image from the self-hosted Nexus repository.
     base-push : Pushes the base image '${base_img_name}' to the self-hosted Nexus repository.
@@ -67,7 +77,7 @@ docker_file="${work_dir}/python.Dockerfile"
 cd "${script_dir}" || exit 1
 
 # Parse options.
-temp=$(getopt -o 'hp:' --long 'help,project:' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hp:' --long 'help,platform:,project:' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	ShowHelp
@@ -82,6 +92,20 @@ while true; do
 		-h | --help)
 			ShowHelp
 			exit 0
+			;;
+
+		--platform)
+			platform="${2}"
+			shift 2
+			# When the platform does not match the default base image modify it.
+			if [[ "${platform}" == 'arm64' && "${base_img_name}" =~ ^amd64 ]]; then
+				base_img_name='arm64v8/ubuntu'
+				echo "Defaulting platform '${platform}' to base image '${base_img_name}'."
+			elif [[ "${platform}" == 'amd64' && "${base_img_name}" =~ ^arm64 ]]; then
+				base_img_name='amd64/ubuntu'
+				echo "Defaulting platform '${platform}' to base image '${base_img_name}'."
+			fi
+			continue
 			;;
 
 		-p | --project)
@@ -123,49 +147,51 @@ case "${cmd}" in
 
 	push)
 		# Add tag to having the correct prefix so it can be pushed to a private repository.
-		docker tag "${NEXUS_REPOSITORY}/${img_name}" "${img_name}"
+		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}" "${img_name}"
 		# Push the repository.
-		docker image push "${NEXUS_REPOSITORY}/${img_name}"
+		docker image push "${NEXUS_REPOSITORY}/${platform}/${img_name}"
 		;;
 
 	docker-push)
 		docker_img_name="${DOCKER_USER}/${img_name%%:*}"
 		# Add tag to having the correct prefix so it can be pushed to a private repository.
-		docker tag "${NEXUS_REPOSITORY}/${img_name}" "${docker_img_name}"
+		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}" "${platform}/${docker_img_name}"
 		# Push the repository.
-		docker image push "${docker_img_name}"
+		docker image push "${platform}/${docker_img_name}"
 		;;
 
 	pull)
 		# Logout from any current server.
 		docker logout
 		# Pull the image from the Nexus server.
-		docker pull "${NEXUS_REPOSITORY}/${img_name}"
+		docker pull "${NEXUS_REPOSITORY}/${platform}/${img_name}"
 		# Add tag without the Nexus server prefix.
-		docker tag "${NEXUS_REPOSITORY}/${img_name}" "${img_name}"
+		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}" "${platform}/${img_name}"
 		;;
 
 	build | buildx)
 		# Stop all containers using this image.
 		# shellcheck disable=SC2046
-		if [[ -n "$(docker ps -a -q --filter ancestor="${img_name}")" ]]; then
-			echo "Stopping containers using image '${img_name}'."
-			docker stop $(docker ps -a -q --filter ancestor="${img_name}")
+		if [[ -n "$(docker ps -a -q --filter ancestor="${platform}/${img_name}")" ]]; then
+			echo "Stopping containers using image '${platform}/${img_name}'."
+			docker stop $(docker ps -a -q --filter ancestor="${platform}/${img_name}")
 		fi
 		# Build the image.
 		dckr_cmd=(docker)
 		dckr_cmd+=("${cmd}")
+		dckr_cmd+=(--platform "linux/${platform}")
 		dckr_cmd+=(--progress plain)
+		dckr_cmd+=(--build-arg "PLATFORM=${platform}")
 		dckr_cmd+=(--build-arg "BASE_IMG=${NEXUS_REPOSITORY}/${base_img_name}")
 		dckr_cmd+=(--build-arg "NEXUS_SERVER_URL=${NEXUS_SERVER_URL}")
 		dckr_cmd+=(--build-arg "NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${raw_lib_offset}")
 		dckr_cmd+=(--file "${docker_file}")
-		dckr_cmd+=(--tag "${img_name}")
+		dckr_cmd+=(--tag "${platform}/${img_name}")
 		dckr_cmd+=(--network host)
 		dckr_cmd+=("${work_dir}")
 		"${dckr_cmd[@]}"
 		# Add also the private repository tag.
-		docker tag "${img_name}" "${NEXUS_REPOSITORY}/${img_name}"
+		docker tag "${platform}/${img_name}" "${NEXUS_REPOSITORY}/${platform}/${img_name}"
 		;;
 
 	versions)
@@ -184,6 +210,7 @@ case "${cmd}" in
 		dckr_cmd+=(--rm)
 		dckr_cmd+=(--interactive)
 		dckr_cmd+=(--tty)
+		dckr_cmd+=(--platform "linux/${platform}")
 		dckr_cmd+=(--device /dev/fuse)
 		dckr_cmd+=(--cap-add SYS_ADMIN)
 		dckr_cmd+=(--net=host)
@@ -200,7 +227,7 @@ case "${cmd}" in
 		fi
 		dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
 		dckr_cmd+=(--workdir "/mnt/project/")
-		dckr_cmd+=("${img_name}")
+		dckr_cmd+=("${platform}/${img_name}")
 		dckr_cmd+=("${@}")
 		"${dckr_cmd[@]}"
 		;;
