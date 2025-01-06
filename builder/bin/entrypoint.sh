@@ -34,7 +34,9 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	# Change the owner of 'user' home directory and all in the 'bin' directory.
 	chown user:user ~user
 	# Change the ownership of the existing temporary wine directory created during the image building.
-	chown user:user --recursive /tmp/wine-*
+	for dir in /tmp/wine-*; do
+		chown user:user --recursive "${dir}"
+	done
 	#chown user:user -R ~user/.wine
 	chown user:user --recursive ~user/bin
 	# Add symlink to project mount when it exists.
