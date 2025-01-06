@@ -26,7 +26,7 @@ zip_file="${zip_file_base}.zip"
 
 function report {
 	echo "
-Qt Repository     : v${qt_repo}
+Qt Repository     : ${qt_repo}
 Qt Version Branch : v${qt_ver}
 Library Directory : ${lib_dir}
 Build Directory   : ${build_dir}
@@ -58,6 +58,9 @@ function show_help {
   build        : Calls the cmake build to compile the libraries/framework
   install      : Install the build in the reported library directory.
   zip          : Creates a zip-file from the library directory for upload to Nexus for download in Docker images.
+
+Steps to build Qt v${qt_ver} in order are:
+  deps, clone, init, conf, build, install ,zip
 "
 }
 
@@ -121,6 +124,13 @@ case $1 in
 			libx11-dev \
 			libx11-xcb-dev \
 			libx11-xcb1 \
+			x11-apps \
+			xcb libxkbcommon-x11-0 \
+			libxcb-xinput0 \
+			libxcb-cursor0 \
+			libxcb-shape0 \
+			libxcb-icccm4 \
+			libxcb-image0 \
 			libxcb-xinput-dev \
 			libxcb-cursor-dev \
 			libxcb-glx0-dev \
@@ -148,7 +158,8 @@ case $1 in
 			mesa-common-dev \
 			ninja-build \
 			perl \
-			python3 wayland-protocols \
+			python3 \
+			wayland-protocols \
 			zlib1g-dev \
 			libsm-dev
 		;;
@@ -166,21 +177,19 @@ case $1 in
 		report
 		if [[ -d "${build_dir}" ]]; then
 			echo "Removing build directory '${build_dir}'."
-			rm -r "${lib_dir}"
+			rm -r "${build_dir}"
 		fi
 		;;
 
 	conf-help)
-		mkdir -p "${build_dir}"
-		pushd "${build_dir}"
-		qt/configure -help 2>&1
+		pushd "${run_dir}/qt"
+		./configure -help 2>&1
 		popd
 		;;
 
 	feat-help)
-		mkdir -p "${build_dir}"
-		pushd "${build_dir}"
-		qt/configure -list-features 2>&1
+		pushd "${run_dir}/qt"
+		./configure -list-features 2>&1
 		echo "
 Enable/Disable feature using options:
   -feature-<feature>
@@ -207,26 +216,45 @@ Enable/Disable feature using options:
 			-opensource \
 			-confirm-license \
 			-ccache \
+			-make libs \
+			-make tools \
 			-nomake examples \
 			-nomake tests \
-			-skip qtwebengine \
+			-qpa xcb \
 			-skip qtcharts \
-			-skip qttools \
 			-skip qtdoc \
-			-skip qttranslations \
+			-skip qtgraphs \
+			-skip qtmultimedia \
 			-skip qtquick \
 			-skip qtquick3d \
-			-skip qtgraphs \
-			-skip qtquickcontrols \
 			-skip qtquick3dphysics \
+			-skip qtquickcontrols \
+			-skip qtquickcontrols2 \
 			-skip qtquickeffectmaker \
 			-skip qtquicktimeline \
-			-skip qtwebview \
+			-skip qtshadertools \
+			-skip qttranslations \
 			-skip qtwebchannel \
+			-skip qtwebengine \
+			-skip qtwebview \
 			-feature-ccache \
-			-no-feature-spatialaudio_quick3d
-		# Next feature needs to be set in the CMakeCache.txt file.
-		#	-feature-system_xcb_xinput
+			-feature-designer \
+			-no-feature-spatialaudio_quick3d \
+			-no-feature-qdoc \
+			-no-feature-qmake \
+			-no-feature-wayland-compositor-quick \
+			-no-feature-clang \
+			-skip qtdeclarative \
+			-skip qtspeech \
+			-skip qtlocation \
+			-skip qtlottie \
+			-skip qtmqtt \
+			-skip qtopcua \
+			-skip qtvirtualkeyboard
+
+		# Next option need some additional packages installed.
+		# -qpa wayland \
+		#
 		popd
 		;;
 
@@ -245,6 +273,13 @@ Enable/Disable feature using options:
 			"${build_dir}/CMakeCache.txt"
 		;;
 
+	targets)
+		report
+		pushd "${build_dir}"
+		cmake --build . --target help
+		popd
+		;;
+
 	build)
 		report
 		pushd "${build_dir}"
@@ -252,10 +287,17 @@ Enable/Disable feature using options:
 		popd
 		;;
 
+	tbuild)
+		report
+		pushd "${build_dir}"
+		cmake --build . --parallel --target "libQt6Designer.so"
+		popd
+		;;
+
 	install)
 		if [[ -d "${lib_dir}" ]]; then
 			echo "Renaming library directory '${lib_dir}' first."
-			echo mv "${lib_dir}" "${lib_dir}_$(date +'%FT%T')"
+			mv "${lib_dir}" "${lib_dir}_$(date +'%FT%T')"
 		fi
 		pushd "${build_dir}"
 		cmake --install .

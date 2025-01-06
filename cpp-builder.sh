@@ -183,7 +183,7 @@ done
 
 # When no Qt version given find the newest one.
 if [[ "${qt_ver}" == 'max' ]]; then
-	qt_ver="$(basename "$(find "${qt_lib_dir}/lnx-${architecture}/" -maxdepth 1 -type d -regex ".*\/[0-9]\\.[0-9]+\\.[0-9]+$" | sort --reverse --version-sort | head -n 1)")"
+	qt_ver="$(basename "$(find "${qt_lib_dir}/lnx-${architecture}/" -maxdepth 1 -regextype posix-extended -regex '^.*[0-9]+\.[0-9]+\.[0-9]+$' | sort --reverse --version-sort | head -n 1)")"
 	if [[ -z "${qt_ver}" ]]; then
 		echo "No Qt version directory found in '${qt_lib_dir}/lnx-${architecture}'!"
 	else
