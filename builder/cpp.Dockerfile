@@ -124,13 +124,15 @@ RUN sed -i -e 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
 ARG PLATFORM="amd64"
 # Version of the Qt library and when empty do not install a Qt library at all.
 ARG QT_VERSION=""
+# Timestamp to force the Docker steps.
+ARG NEXUS_TIMESTAMP=""
 # Use the arguments to pass the library URL.
 ARG NEXUS_SERVER_URL
 ARG NEXUS_RAW_LIB_URL
 # Get the compressed Qt library.
-RUN if [[ -n "${QT_VERSION}" ]]; then wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}.zip" -O "qt-lnx-$(uname -m).zip";  fi
+RUN if [[ -n "${QT_VERSION}" ]]; then wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -O "qt-lnx-$(uname -m).zip";  fi
 # Get the compressed QtWin library only for the 'x86_64' machines.
-RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-$(uname -m)-${QT_VERSION}.zip" -O "qt-win-$(uname -m).zip"; fi
+RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-$(uname -m)-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -O "qt-win-$(uname -m).zip"; fi
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
 # Remove wine temporary directories '/tmp/wine-*' at the end to allow running as a different.
@@ -145,7 +147,7 @@ RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
     fi
 
 # Copy the Windows registry files as a fix since no registry files are created during the build.
-RUN if [[ "$(uname -m)" == 'x86_64' ]]; then wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz" -O- | tar -C "${WINEPREFIX}" -xzf - ; fi
+RUN if [[ "$(uname -m)" == 'x86_64' ]]; then wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz?${NEXUS_TIMESTAMP}" -O- | tar -C "${WINEPREFIX}" -xzf - ; fi
 
 # Ubuntu 24.04 has a default 'ubuntu' user.
 RUN userdel --remove ubuntu || exit 0

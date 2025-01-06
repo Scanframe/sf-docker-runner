@@ -241,7 +241,6 @@ Enable/Disable feature using options:
 			-feature-designer \
 			-no-feature-spatialaudio_quick3d \
 			-no-feature-qdoc \
-			-no-feature-qmake \
 			-no-feature-wayland-compositor-quick \
 			-no-feature-clang \
 			-skip qtdeclarative \
