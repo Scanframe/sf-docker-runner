@@ -33,10 +33,8 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	usermod --append --groups "${WINE_USER}" user || exit 1
 	# Change the owner of 'user' home directory and all in the 'bin' directory.
 	chown user:user ~user
-	# Change the ownership of the existing temporary wine directory created during the image building.
-	for dir in /tmp/wine-*; do
-		chown user:user --recursive "${dir}"
-	done
+	# Change the ownership of a possible the existing temporary wine directory created during the image building.
+	chown user:user --recursive /tmp/wine-* 2>/dev/null
 	#chown user:user -R ~user/.wine
 	chown user:user --recursive ~user/bin
 	# Add symlink to project mount when it exists.
