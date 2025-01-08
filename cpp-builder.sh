@@ -207,6 +207,13 @@ fi
 
 case "${cmd}" in
 
+	build-push)
+		"${0}" --qt-ver '' build
+		"${0}" build
+		"${0}" --qt-ver '' push
+		"${0}" push
+		;;
+
 	base-pull)
 		dckr_cmd=(docker)
 		dckr_cmd+=(pull)

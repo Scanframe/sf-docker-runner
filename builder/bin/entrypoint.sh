@@ -59,6 +59,8 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		mkdir --parents "${HOME}/lib"
 		ln -s "/usr/local/lib/qt" "${HOME}/lib/qt"
 	else
+		# Keep track the qt version dirs of each mounted zip-file.
+		declare -A arch_qt_ver_dir
 		# Iterate through all the qt-*.zip files and mount them at the correct places.
 		for zip_file in ls "${HOME}/qt-"*.zip; do
 			if [[ "$(basename "${zip_file}")" =~ ^qt-((lnx|win)-([a-z_0-9]*))\.zip$ ]]; then
@@ -68,14 +70,21 @@ if [[ "$(id -u)" -eq 0 ]]; then
 					if [[ "${BASH_REMATCH[1]}" == 'lnx-x86_64' ]]; then
 						ln -rs "${mount_dir}" "${mount_dir}/../Qt"
 					fi
-					if ! fuse-zip -o ro,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
+					if ! fuse-zip -o rw,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
 						WriteLog "Mounting Qt library zip-file '${zip_file}' onto '${mount_dir}' failed!"
 					else
+						# shellcheck disable=SC212
+						arch_qt_ver_dir["${BASH_REMATCH[1]}"]="$(find "${mount_dir}" -maxdepth 1 -type d -regex ".*/[0-9]+\.[0-9]+\.[0-9]+$")"
 						WriteLog "Qt zipped '${BASH_REMATCH[2]}' library is mounted on '${mount_dir}'."
 					fi
 				fi
 			fi
 		done
+		# Fix the Qt build tools in subdir libexec for lnx-x86_64 cross-compiling architecture lnx-aarch64.
+		if [[ -d "${arch_qt_ver_dir['lnx-x86_64']}" && -d "${arch_qt_ver_dir['lnx-aarch64']}" ]]; then
+			mv "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec-original" && \
+			ln -rs  "${arch_qt_ver_dir['lnx-x86_64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec"
+		fi
 	fi
 
 	WriteLog "Working directory: $(pwd)"

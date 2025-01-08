@@ -46,10 +46,42 @@ RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
       apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/* ; \
     fi
 
+# Modfify the the apt sources and list files by adding the architecture.
+# Also create sources file for arm64 cross-compile needed Qt packages.
+RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
+    sed --in-place --regexp-extended 's/^(deb|deb-src)\s+(http|ftp)/\1 [arch=amd64,i386] \2/' /etc/apt/sources.list.d/*.list; \
+    sed --in-place '/^Types: deb$/a\Architectures: amd64 i386' /etc/apt/sources.list.d/*.sources; \
+    printf "\
+Types: deb\n\
+URIs: http://ports.ubuntu.com/ubuntu-ports\n\
+Suites: noble noble-updates noble-backports\n\
+Components: main universe restricted multiverse\n\
+Architectures: arm64\n\
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\
+\n\
+## Ubuntu security updates. Aside from URIs and Suites,\n\
+## this should mirror your choices in the previous section.\n\
+Types: deb\n\
+URIs: http://ports.ubuntu.com/ubuntu-ports\n\
+Suites: noble-security\n\
+Components: main universe restricted multiverse\n\
+Architectures: arm64\n\
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\
+" >/etc/apt/sources.list.d/ubuntu-arm64.sources; \
+    dpkg --add-architecture arm64 && apt-get update; \
+    apt-get --yes install gcc-aarch64-linux-gnu:amd64 g++-aarch64-linux-gnu:amd64 binutils-aarch64-linux-gnu:amd64 \
+    libgles-dev:arm64 libegl-dev:arm64 libgl-dev:arm64 libpcre2-16-0:arm64 libglvnd-dev:arm64 libpng16-16t64:arm64 \
+    xcb:arm64 libxkbcommon-x11-0:arm64 libxcb-xinput0:arm64 libxcb-cursor0:arm64 libxcb-shape0:arm64 \
+    libxcb-icccm4:arm64 libxcb-image0:arm64 libxcb-keysyms1:arm64 libxcb-render-util0:arm64 libdbus-1-3:arm64  \
+    libcairo-gobject2:arm64; \
+    apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*; \
+    fi
+
 # Copy some needed scripts to the root bin directory.
-COPY bin/.profile /root/bin/.profile
-COPY build-scripts/gcovr-install.sh /root/bin/gcovr-install.sh
-# Install latest gcovr command using pip in an virtual environement.
+COPY bin/.profile /root/
+COPY build-scripts/*.sh /root/bin/
+
+# Install latest gcovr command using pip in a virtual environement.
 RUN /root/bin/gcovr-install.sh
 
 # Qt requires locale UTF8.
@@ -129,10 +161,13 @@ ARG NEXUS_TIMESTAMP=""
 # Use the arguments to pass the library URL.
 ARG NEXUS_SERVER_URL
 ARG NEXUS_RAW_LIB_URL
-# Get the compressed Qt library.
+# Get the compressed native Qt library.
 RUN if [[ -n "${QT_VERSION}" ]]; then wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -O "qt-lnx-$(uname -m).zip";  fi
-# Get the compressed QtWin library only for the 'x86_64' machines.
-RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-$(uname -m)-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -O "qt-win-$(uname -m).zip"; fi
+# Get the compressed Qt cross platform libraries only for the 'x86_64' machines.
+RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-x86_64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -O "qt-win-x86_64.zip"; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-aarch64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -O "qt-lnx-aarch64.zip"; \
+    fi
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
 # Remove wine temporary directories '/tmp/wine-*' at the end to allow running as a different.
