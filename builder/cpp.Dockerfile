@@ -72,8 +72,8 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\
     apt-get --yes install gcc-aarch64-linux-gnu:amd64 g++-aarch64-linux-gnu:amd64 binutils-aarch64-linux-gnu:amd64 \
     libgles-dev:arm64 libegl-dev:arm64 libgl-dev:arm64 libpcre2-16-0:arm64 libglvnd-dev:arm64 libpng16-16t64:arm64 \
     xcb:arm64 libxkbcommon-x11-0:arm64 libxcb-xinput0:arm64 libxcb-cursor0:arm64 libxcb-shape0:arm64 \
-    libxcb-icccm4:arm64 libxcb-image0:arm64 libxcb-keysyms1:arm64 libxcb-render-util0:arm64 libdbus-1-3:arm64  \
-    libcairo-gobject2:arm64; \
+    libxcb-icccm4:arm64 libxcb-image0:arm64 libxcb-keysyms1:arm64 libxcb-render-util0:arm64 libdbus-1-3:arm64 \
+    libcairo-gobject2:arm64 qemu-user-static:amd64; \
     apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*; \
     fi
 
