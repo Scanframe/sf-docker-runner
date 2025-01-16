@@ -3,7 +3,10 @@
 .idea
 .nexus-credentials
 .minio-credentials
+.qt-lib-dir
 gitlab-runner/config/config.toml
 gitlab-runner/config/.runner_system_id
 minio/data
 minio/config/*
+/qt-build
+/lib/*

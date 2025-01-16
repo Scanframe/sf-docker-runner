@@ -58,8 +58,8 @@ function show_help {
     pull            : Pulls the docker image from the self-hosted Nexus repository.
     base-pull       : Pulls the base image '${base_img_name}:${base_img_tag}' and tags it for the self-hosted docker registry.
     base-push       : Pulls the base image '${base_img_name}:${base_img_tag}' when not there and pushes it to the self-hosted Nexus docker registry.
-    qt-lnx          : Generates the 'qt-lnx.zip' from the current user's Linux Qt library.
-    qt-win          : Generates the 'qt-win.zip' from the current user's Cross Windows Qt library.
+    qt-lnx          : Generates the 'qt-lnx.zip' from the current user's Linux Qt framework/library location.
+    qt-win          : Generates the 'qt-win.zip' from the current user's Cross Windows Qt framework/library location.
     qt-w64          : Generates the 'qt-w64.zip' from the Windows Qt library relative to the current user's Qt.
     qt-w64-tools    : Generates the 'qt-tools.zip' from the Windows Qt library relative to the current user's Qt.
     qt-lnx-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-lnx-<architecture>-<qt-ver>.zip'.
@@ -83,6 +83,9 @@ function show_help {
      ./${cmd_name} build
     The same as above but not using the defaults.
       ./${cmd_name} --base-image amd64/ubuntu --platform amd64 --qt-ver 'max' build
+
+   Notes:
+     The file '.qt-lib-dir' overrides the default Qt framework's location of '${qt_lib_dir}'.
 "
 }
 
@@ -181,9 +184,23 @@ while true; do
 	esac
 done
 
+# Location for the Qt libraries other then the default.
+if [[ ! -d qt_lib_dir && ! -L qt_lib_dir ]]; then
+	qt_lib_dir_file=".qt-lib-dir"
+	# Check if the qt libs directory file exists.
+	if [[ -f "${script_dir}/${qt_lib_dir_file}" ]]; then
+		# Read the first line of the file and strip the newline.
+		qt_lib_dir="$(head -n 1 "${script_dir}/${qt_lib_dir_file}" | tr -d '\n' | tr -d '\n' | tr -d '\r')"
+		if [[ ! -d "${qt_lib_dir}/" ]]; then
+			WriteLog "# Qt Library directory given in '${qt_lib_dir_file}' does not exist!"
+		fi
+	fi
+fi
+
 # When no Qt version given find the newest one.
 if [[ "${qt_ver}" == 'max' ]]; then
-	qt_ver="$(basename "$(find "${qt_lib_dir}/lnx-${architecture}/" -maxdepth 1 -regextype posix-extended -regex '^.*[0-9]+\.[0-9]+\.[0-9]+$' | sort --reverse --version-sort | head -n 1)")"
+	qt_ver="$(basename "$(find "${qt_lib_dir}/lnx-${architecture}/" -maxdepth 1 -regextype posix-extended \
+		-regex '^.*[0-9]+\.[0-9]+\.[0-9]+$' | sort --reverse --version-sort | head -n 1)")"
 	if [[ -z "${qt_ver}" ]]; then
 		echo "No Qt version directory found in '${qt_lib_dir}/lnx-${architecture}'!"
 	else
@@ -293,7 +310,7 @@ case "${cmd}" in
 
 	qt-w64)
 		# Check if the Qt version library directory exists for Windows.
-		qt_w64_dir="$(realpath "${qt_lib_dir}/lnx-${architecture}")/../../windows/Qt"
+		qt_w64_dir="$(realpath "${qt_lib_dir}/lnx-${architecture}")/../win-${architecture}"
 		if [[ ! -d "${qt_w64_dir}/${qt_ver}" ]]; then
 			echo "Qt version directory '${qt_w64_dir}/${qt_ver}' does not exist!"
 			exit 1
@@ -323,7 +340,7 @@ case "${cmd}" in
 
 	qt-w64-tools)
 		# Check if the Qt version library directory exists for Windows.
-		qt_w64_dir="$(realpath "${qt_lib_dir}/lnx-${architecture}")/../../windows/Qt"
+		qt_w64_dir="$(realpath "${qt_lib_dir}/lnx-${architecture}")/../win-${architecture}"
 		if [[ ! -d "${qt_w64_dir}/Tools" ]]; then
 			echo "Qt Tools directory '${qt_w64_dir}' does not exist!"
 			exit 1

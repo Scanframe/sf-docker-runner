@@ -15,7 +15,7 @@ qt_ver="6.7.2"
 # Qt repository URL.
 qt_repo=https://code.qt.io/qt/qt5.git
 # Directory to eventually ZIP.
-lib_dir="${run_dir}/lib-$(uname -m)"
+lib_dir="$(realpath "${run_dir}/../lnx-$(uname -m)")"
 # Install directory for cmake.
 install_dir="${lib_dir}/${qt_ver}/gcc_64"
 # Build directory.
@@ -28,8 +28,8 @@ function report {
 	echo "
 Qt Repository     : ${qt_repo}
 Qt Version Branch : v${qt_ver}
-Library Directory : ${lib_dir}
 Build Directory   : ${build_dir}
+Library Directory : ${lib_dir}
 Install Directory : ${install_dir}
 Zip file          : ${zip_file}
 "
@@ -40,8 +40,11 @@ function show_help {
 	report
 	echo "Available commands:
   help         : Shows this help.
+  run          : Run the Docker container for this script to execute.
+  start        : Start the Docker container for this script to execute in the background.
+  stop         : Stop the Docker container for this script to execute in the background.
+  attach       : Attach to the Docker container for this script to execute in the background.
   doc          : Open documentation web-pages.
-  deps-aarch64 : Install needed packages for cross-compiling 'aarch64' on 'x86_64'.
   deps         : Install dependencies needed to build.
   clone        : Clone the Qt repository from '${qt_repo}' at branch 'v${qt_ver}'.
   init         : Initialize the Git repositories.
@@ -64,20 +67,36 @@ Steps to build Qt v${qt_ver} in order are:
 "
 }
 
+if [[ "$#" -eq 0 ]]; then
+	show_help;
+	exit 0
+fi
+
+# Command available from outside Docker.
 case $1 in
+
+	run | start | stop | attach)
+		# Run Docker image without a Qt version configured.
+		"${run_dir}/cpp-builder.sh" --qt-ver '' --project "${run_dir}/../../../applications/library/qt" "$@"
+		exit 0
+		;;
 
 	doc)
 		report
 		xdg-open "https://wiki.qt.io/Cross-Compile_Qt_6_for_Raspberry_Pi"
+		exit 0
 		;;
 
-	deps-aarch64)
-		if [[ "$(uname -m)" != 'aarch64' ]]; then
-			sudo apt update && sudo apt install g++-aarch64-linux-gnu
-		else
-			echo "Not possible since this already an 'aarch64' platform."
-		fi
-		;;
+esac
+
+# When not in docker bailout here.
+if [[ ! -f /.dockerenv ]]; then
+	echo "Command '$1' only available from within the docker container."
+	exit 1
+fi
+
+# Command available from within Docker.
+case $1 in
 
 	clone)
 		report
@@ -125,7 +144,8 @@ case $1 in
 			libx11-xcb-dev \
 			libx11-xcb1 \
 			x11-apps \
-			xcb libxkbcommon-x11-0 \
+			xcb \
+			libxkbcommon-x11-0 \
 			libxcb-xinput0 \
 			libxcb-cursor0 \
 			libxcb-shape0 \
