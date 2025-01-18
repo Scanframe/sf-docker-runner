@@ -134,7 +134,10 @@ fi\n\
 if [ -d \"\$HOME/bin\" ] ; then\n\
     PATH=\"\$HOME/bin:\$PATH\"\n\
 fi\n\
-mesg n || true\n\
+# Source the display script when made available.\n\
+if [ -f "\$HOME/.display.sh" ] ; then\n\
+    source "\$HOME/.display.sh"\n\
+fi\n\
 " | tee "${HOME}/.profile" > "${HOME}/.bash_profile"
 
 # Create '.bashrc' file in the home directory.
@@ -162,11 +165,13 @@ ARG NEXUS_TIMESTAMP=""
 ARG NEXUS_SERVER_URL
 ARG NEXUS_RAW_LIB_URL
 # Get the compressed native Qt library.
-RUN if [[ -n "${QT_VERSION}" ]]; then wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -O "qt-lnx-$(uname -m).zip";  fi
+RUN if [[ -n "${QT_VERSION}" ]]; then \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-lnx-$(uname -m).zip"; \
+    fi
 # Get the compressed Qt cross platform libraries only for the 'x86_64' machines.
 RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-x86_64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -O "qt-win-x86_64.zip"; \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-aarch64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -O "qt-lnx-aarch64.zip"; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-x86_64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-win-x86_64.zip"; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-aarch64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-lnx-aarch64.zip"; \
     fi
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
@@ -175,14 +180,16 @@ RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then \
 ENV WINEPREFIX="/opt/wine-prefix"
 # Install Wine only on 'x86_64' machines.
 RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
-    (Xvfb :10 -screen 0 1024x768x24 &) && \
-    sudo mkdir "${WINEPREFIX}" && sudo chown user:user "${WINEPREFIX}" && \
-    sudo --user=user WINEPREFIX="${WINEPREFIX}" WINEDLLOVERRIDES="mscoree=d" DISPLAY=:10 wineboot && \
-    rm -rf /tmp/wine-* ; \
+      (Xvfb :10 -screen 0 1024x768x24 &) && \
+      sudo mkdir "${WINEPREFIX}" && sudo chown user:user "${WINEPREFIX}" && \
+      sudo --user=user WINEPREFIX="${WINEPREFIX}" WINEDLLOVERRIDES="mscoree=d" DISPLAY=:10 wineboot && \
+      rm -rf /tmp/wine-* ; \
     fi
 
 # Copy the Windows registry files as a fix since no registry files are created during the build.
-RUN if [[ "$(uname -m)" == 'x86_64' ]]; then wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz?${NEXUS_TIMESTAMP}" -O- | tar -C "${WINEPREFIX}" -xzf - ; fi
+RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
+      wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz?${NEXUS_TIMESTAMP}" -qO- | tar -C "${WINEPREFIX}" -xzf - ; \
+    fi
 
 # Ubuntu 24.04 has a default 'ubuntu' user.
 RUN userdel --remove ubuntu || exit 0

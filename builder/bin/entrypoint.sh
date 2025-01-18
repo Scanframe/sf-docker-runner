@@ -66,10 +66,6 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			if [[ "$(basename "${zip_file}")" =~ ^qt-((lnx|win)-([a-z_0-9]*))\.zip$ ]]; then
 				mount_dir="${HOME}/lib/qt/${BASH_REMATCH[1]}"
 				if mkdir --parent "${mount_dir}"; then
-					# Hack for fixing symlinks used referring to Qt.
-					if [[ "${BASH_REMATCH[1]}" == 'lnx-x86_64' ]]; then
-						ln -rs "${mount_dir}" "${mount_dir}/../Qt"
-					fi
 					if ! fuse-zip -o rw,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
 						WriteLog "Mounting Qt library zip-file '${zip_file}' onto '${mount_dir}' failed!"
 					else
@@ -82,12 +78,16 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		done
 		# Fix the Qt build tools in subdir libexec for lnx-x86_64 cross-compiling architecture lnx-aarch64.
 		if [[ -d "${arch_qt_ver_dir['lnx-x86_64']}" && -d "${arch_qt_ver_dir['lnx-aarch64']}" ]]; then
-			mv "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec-original" && \
-			ln -rs  "${arch_qt_ver_dir['lnx-x86_64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec"
+			mv "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec-original" &&
+				ln -rs "${arch_qt_ver_dir['lnx-x86_64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec"
 		fi
 	fi
-
 	WriteLog "Working directory: $(pwd)"
+	# Check if the host has the X11 display passed.
+	if [[ -n "${DISPLAY}" && -f "${HOME}/.Xauthority" ]]; then
+		# Create file for profile to import to be used when running sshd.
+		echo "export DISPLAY=${DISPLAY}" >"${HOME}/.display.sh"
+	fi
 	# Execute CMD passed by the user when starting the image.
 	if [[ $# -ne 0 ]]; then
 		WriteLog "Calling command:" "${@}"
@@ -102,7 +102,7 @@ elif [[ "$(id -nu)" == "user" ]]; then
 	sudo -E "${0}" "${@}" || exit 1
 else
 	WriteLog "User(${HOME}): $(id -u) $(stat "${HOME}" --format='%u:%g') > '${*}'"
-	echo "Entrypoint not running as root which is required!
+	WriteLog "Entrypoint not running as root which is required!
 When using CLion replace the Docker arguments in the configuration with:
     --rm --privileged --env LOCAL_USER=\"$(id -u):$(id -u)\"
   or:

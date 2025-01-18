@@ -35,6 +35,10 @@ fi
 # Set the default architecture.
 architecture="$(uname -m)"
 
+function WriteLog {
+	echo "${@}" 1>&2
+}
+
 # Prints the help.
 #
 function show_help {
@@ -66,10 +70,11 @@ function show_help {
     qt-win-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-win-<architecture>-<qt-ver>.zip'.
     qt-w64-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-<architecture>-<qt-ver>.zip'.
     qt-w64-tools-up : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-tools.zip'.
-    run             : Runs the docker container named '${container_name}' in the foreground mounting the passed project directory using the host's X-server.
-    runx            : Same as 'runx' using a fake X-server.
+    run             : Runs the docker container named '${container_name}' in the foreground mounting without passing the hosts X11 server.
+    runx            : Same as 'run' passing the hosts X11 server.
     stop            : Stops the container named '${container_name}' running in the background.
     start           : Starts the container named '${container_name}' running in the background with sshd service enabled.
+    startx          : Same as 'start' passing the hosts X11 server.
     kill            : Kills the container named '${container_name}' running in the background.
     status          : Return the status of named '${container_name}' the container running in the background.
     attach          : Attaches to the  in the background running container named '${container_name}'.
@@ -97,7 +102,7 @@ fi
 
 # Check if the required credential file exists.
 if [[ ! -f "${script_dir}/.nexus-credentials" ]]; then
-	echo "File '${script_dir}/.nexus-credentials' is required."
+	WriteLog "File '${script_dir}/.nexus-credentials' is required!"
 	exit 1
 fi
 # Read the credentials from non repository file.
@@ -148,10 +153,10 @@ while true; do
 			# When the platform does not match the default base image modify it.
 			if [[ "${platform}" == 'arm64' && "${base_img_name}" =~ ^amd64 ]]; then
 				base_img_name='arm64v8/ubuntu'
-				echo "Defaulting platform '${platform}' to base image '${base_img_name}'."
+				WriteLog "Defaulting platform '${platform}' to base image '${base_img_name}'."
 			elif [[ "${platform}" == 'amd64' && "${base_img_name}" =~ ^arm64 ]]; then
 				base_img_name='amd64/ubuntu'
-				echo "Defaulting platform '${platform}' to base image '${base_img_name}'."
+				WriteLog "Defaulting platform '${platform}' to base image '${base_img_name}'."
 			fi
 			continue
 			;;
@@ -164,7 +169,7 @@ while true; do
 
 		-p | --project)
 			if [[ ! -d "${2}" ]]; then
-				echo "Project directory '${2}' does not exist!"
+				WriteLog "Project directory '${2}' does not exist!"
 				exit 1
 			fi
 			project_dir="$(realpath "${2}")"
@@ -178,7 +183,7 @@ while true; do
 			;;
 
 		*)
-			echo "Internal error on argument (${1}) !" >&2
+			WriteLog "Internal error on argument (${1}) !" >&2
 			exit 1
 			;;
 	esac
@@ -202,9 +207,9 @@ if [[ "${qt_ver}" == 'max' ]]; then
 	qt_ver="$(basename "$(find "${qt_lib_dir}/lnx-${architecture}/" -maxdepth 1 -regextype posix-extended \
 		-regex '^.*[0-9]+\.[0-9]+\.[0-9]+$' | sort --reverse --version-sort | head -n 1)")"
 	if [[ -z "${qt_ver}" ]]; then
-		echo "No Qt version directory found in '${qt_lib_dir}/lnx-${architecture}'!"
+		WriteLog "No Qt version directory found in '${qt_lib_dir}/lnx-${architecture}'!"
 	else
-		echo "Qt version '${qt_ver}' found in directory '${qt_lib_dir}/lnx-${architecture}'!"
+		WriteLog "Qt version '${qt_ver}' found in directory '${qt_lib_dir}/lnx-${architecture}'!"
 	fi
 fi
 
@@ -253,7 +258,7 @@ case "${cmd}" in
 		# Check if the Qt version library directory exists.
 		ver_dir="${qt_lib_dir}/lnx-${architecture}/${qt_ver}"
 		if [[ ! -d "${ver_dir}" ]]; then
-			echo "Qt version directory '${ver_dir}' does not exist!"
+			WriteLog "Qt version directory '${ver_dir}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
@@ -282,7 +287,7 @@ case "${cmd}" in
 		# Check if the Qt version library directory exists.
 		ver_dir="${qt_lib_dir}/win-${architecture}/${qt_ver}"
 		if [[ ! -d "${ver_dir}" ]]; then
-			echo "Qt version directory '${ver_dir}' does not exist!"
+			WriteLog "Qt version directory '${ver_dir}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
@@ -312,7 +317,7 @@ case "${cmd}" in
 		# Check if the Qt version library directory exists for Windows.
 		qt_w64_dir="$(realpath "${qt_lib_dir}/lnx-${architecture}")/../win-${architecture}"
 		if [[ ! -d "${qt_w64_dir}/${qt_ver}" ]]; then
-			echo "Qt version directory '${qt_w64_dir}/${qt_ver}' does not exist!"
+			WriteLog "Qt version directory '${qt_w64_dir}/${qt_ver}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
@@ -342,7 +347,7 @@ case "${cmd}" in
 		# Check if the Qt version library directory exists for Windows.
 		qt_w64_dir="$(realpath "${qt_lib_dir}/lnx-${architecture}")/../win-${architecture}"
 		if [[ ! -d "${qt_w64_dir}/Tools" ]]; then
-			echo "Qt Tools directory '${qt_w64_dir}' does not exist!"
+			WriteLog "Qt Tools directory '${qt_w64_dir}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
@@ -396,7 +401,7 @@ case "${cmd}" in
 		# Stop all containers using this image.
 		# shellcheck disable=SC2046
 		if [[ -n "$(docker ps -a -q --filter ancestor="${platform}/${img_name}:${img_tag}")" ]]; then
-			echo "Stopping containers using image '${platform}/${img_name}:${img_tag}'."
+			WriteLog "Stopping containers using image '${platform}/${img_name}:${img_tag}'."
 			docker stop $(docker ps -a -q --filter ancestor="${platform}/${img_name}:${img_tag}")
 		fi
 		build_args=("BASE_IMG=${NEXUS_REPOSITORY}/${base_img_name}:${base_img_tag}")
@@ -426,9 +431,9 @@ case "${cmd}" in
 		"${0}" --base-ver "${base_img_tag}" run -- /home/user/bin/versions.sh
 		;;
 
-	run | runx | start)
+	run | runx | start | startx)
 		if [[ -z "${project_dir}" ]]; then
-			echo "Project (option: -p) is required for this command."
+			WriteLog "Project (option: -p) is required for this command."
 			exit 1
 		fi
 		# Use option '--privileged' instead of '--device' and '--security-opt' when having fuse mounting problems.
@@ -449,14 +454,18 @@ case "${cmd}" in
 		dckr_cmd+=(--user user:user)
 		dckr_cmd+=(--env DEBUG=1)
 		#dckr_cmd+=(--volume "${work_dir}/bin:/usr/local/bin/test:ro")
-		if [[ "${cmd}" == "runx" ]]; then
+		if [[ "${cmd}" == "runx" || "${cmd}" == "startx" ]]; then
+			# Check if the host has a X11 display running at all.
+			if [[ -z "${DISPLAY}" || ! -f "${HOME}/.Xauthority" ]]; then
+				WriteLog "Cannot pass X11, DISPLAY or .Xauthority not available!"
+			fi
 			dckr_cmd+=(--env DISPLAY)
 			dckr_cmd+=(--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro")
 		fi
 		dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
 		dckr_cmd+=(--volume "${script_dir}:/mnt/script:ro")
 		dckr_cmd+=(--workdir "/mnt/project/")
-		if [[ "${cmd}" == "start" ]]; then
+		if [[ "${cmd}" == "start"  || "${cmd}" == "startx" ]]; then
 			dckr_cmd+=(--detach)
 			"${dckr_cmd[@]}" "${platform}/${img_name}:${img_tag}" sudo -- /usr/sbin/sshd -e -D -p 3022
 		else
@@ -468,10 +477,10 @@ case "${cmd}" in
 		# Stop this docker container only.
 		cntr_id="$(docker ps --filter name="${container_name}" --quiet)"
 		if [[ -n "${cntr_id}" ]]; then
-			echo "Container ID is '${cntr_id}' and performing '${cmd}' command."
+			WriteLog "Container ID is '${cntr_id}' and performing '${cmd}' command."
 			docker "${cmd}" "${cntr_id}"
 		else
-			echo "Container '${container_name}' is not running."
+			WriteLog "Container '${container_name}' is not running."
 		fi
 		;;
 
@@ -493,7 +502,7 @@ case "${cmd}" in
 		if "${script_dir}/nexus-docker.sh" "${cmd}"; then
 			exit 0
 		fi
-		echo "Command '${cmd}' is invalid!"
+		WriteLog "Command '${cmd}' is invalid!"
 		show_help
 		exit 1
 		;;
