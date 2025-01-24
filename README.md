@@ -7,6 +7,7 @@ The purpose is multiple:
 2. Create a Docker image for building C++ projects which are uploaded to a self-hosted Sonatype Nexus server.
 3. Enable GitLab runner cache using the S3-API from a self-hosted MinIO server using a Docker image.
 4. Use the Docker image in JetBrain's CLion for checking the image only.
+5. Building the Qt library/framework from source.
 
 ### 1) GitLab-Runner via Docker
 
@@ -33,10 +34,9 @@ is created to handle it.
 Command line examples for building executables of a Python project containing executable `*.py` files.
 
 ```shell
-./cpp-builder.sh --project ../../pysrc/dev-tools run -- wine venv-setup.cmd mk-exec.cmd nexus-docker.py
-./cpp-builder.sh --project ../../pysrc/dev-tools run -- ./venv-setup.sh ./mk-exec.sh nexus-docker.py
+./py-builder.sh` --project ../../pysrc/dev-tools run -- wine venv-setup.cmd mk-exec.cmd nexus-docker.py
+./py-builder.sh --project ../../pysrc/dev-tools run -- ./venv-setup.sh ./mk-exec.sh nexus-docker.py
 ```
-
 
 ### 3) Enable GitLab Runner Cache using a MinIO Server 
 
@@ -56,3 +56,18 @@ Running GUI applications the X11 socket needs to be configured with additional r
 `--env DISPLAY --volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro"`.
 CLion does not do variable expansion for Docker command line arguments so expand them manually.
 
+### 5) Building the Qt Library/Framework from Source
+
+Shell script `build-qt-lib.sh` is for building the framework libraries for Linux and for Windows 
+using multiple command steps:
+
+1. Pulling a Git tagged version of the Qt source.
+2. Initializing the Git-submodules.
+3. Installing the dependent libraries for Linux or dependent applications for Windows.
+4. Configuring the cmake files for parts that is only needed to build.
+5. Fix cmake cache file when needed and configure again.
+6. Installing the libraries into the correct named Qt version directory for projects.
+7. Zipping the version for mounting in a Qt versioned Docker Qt build container.
+
+For Linux Qt it is best build it using a Docker container having the correct distro.  
+The build for Windows is done using the same shell script using Cygwin.    

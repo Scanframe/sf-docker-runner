@@ -428,7 +428,7 @@ case "${cmd}" in
 
 	versions)
 		# Just reenter the script using the the correct arguments.
-		"${0}" --base-ver "${base_img_tag}" run -- /home/user/bin/versions.sh
+		"${0}" --base-ver "${base_img_tag}" --qt-ver "${qt_ver}" run -- /home/user/bin/versions.sh
 		;;
 
 	run | runx | start | startx)
