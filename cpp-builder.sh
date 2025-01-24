@@ -314,10 +314,10 @@ case "${cmd}" in
 		;;
 
 	qt-w64)
-		# Check if the Qt version library directory exists for Windows.
-		qt_w64_dir="$(realpath "${qt_lib_dir}/lnx-${architecture}")/../win-${architecture}"
-		if [[ ! -d "${qt_w64_dir}/${qt_ver}" ]]; then
-			WriteLog "Qt version directory '${qt_w64_dir}/${qt_ver}' does not exist!"
+		# Check if the Qt version library directory exists.
+		ver_dir="${qt_lib_dir}/w64-${architecture}/${qt_ver}"
+		if [[ ! -d "${ver_dir}" ]]; then
+			WriteLog "Qt version directory '${ver_dir}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
@@ -325,8 +325,7 @@ case "${cmd}" in
 		# Remove the current zip file.
 		[[ -f "${zip_file}" ]] && rm "${zip_file}"
 		# Change directory in order for zip to store the correct path.
-		pushd "${qt_w64_dir}"
-		# Zip all files except Windows executables.
+		pushd "${qt_lib_dir}/w64-${architecture}/"
 		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}/mingw_64/"{bin,lib,include,libexec,mkspecs,plugins}
 		popd
 		ls -lah "${zip_file}"
