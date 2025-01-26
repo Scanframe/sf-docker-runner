@@ -166,12 +166,12 @@ ARG NEXUS_SERVER_URL
 ARG NEXUS_RAW_LIB_URL
 # Get the compressed native Qt library.
 RUN if [[ -n "${QT_VERSION}" ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-lnx-$(uname -m).zip"; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-lnx-$(uname -m).zip" || exit 1 ; \
     fi
 # Get the compressed Qt cross platform libraries only for the 'x86_64' machines.
 RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-x86_64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-win-x86_64.zip"; \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-aarch64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-lnx-aarch64.zip"; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-x86_64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-win-x86_64.zip" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-aarch64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-lnx-aarch64.zip" || exit 1 ; \
     fi
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
@@ -188,7 +188,7 @@ RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
 
 # Copy the Windows registry files as a fix since no registry files are created during the build.
 RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz?${NEXUS_TIMESTAMP}" -qO- | tar -C "${WINEPREFIX}" -xzf - ; \
+      wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz?${NEXUS_TIMESTAMP}" -qO- | tar -C "${WINEPREFIX}" -xzf - || exit 1; \
     fi
 
 # Ubuntu 24.04 has a default 'ubuntu' user.
