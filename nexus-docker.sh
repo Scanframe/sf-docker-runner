@@ -160,7 +160,7 @@ case "${cmd}" in
 		;;
 
 	local)
-		docker image ls --all "*"
+		docker image ls --all
 		;;
 
 	list)
