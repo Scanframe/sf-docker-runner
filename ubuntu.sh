@@ -1,51 +1,51 @@
 #!/bin/bash
 #set -x
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Set the image name to be used.
-IMG_NAME="nexus.scanframe.com/ubuntu:22.04"
+img_name="nexus.scanframe.com/amd64/ubuntu:24.04"
 # Name of the container to be used.
-CONTAINER_NAME="apt-repo"
+container_name="ubuntu-24.04"
 # Hostname for the docker container.
-HOSTNAME="apt-repo"
+host_name="ubuntu"
 
 ##
 # Function to get the Docker container status.
 #
 function get_status {
-	docker container list --all --format "{{.Status}}" --filter Name="${CONTAINER_NAME}"
+	docker container list --all --format "{{.Status}}" --filter Name="${container_name}"
 }
 
 ##
 # Start or attach to Docker container or create one when it does not exist yet.
 #
 function run_container {
-	local STATUS
+	local status
 	# Get the container status.
-	STATUS="$(get_status)"
+	status="$(get_status)"
 	# When the container does not exists create it.
-	if [[ -z "${STATUS}" ]]; then
-		echo "Creating container '${CONTAINER_NAME}' starting."
+	if [[ -z "${status}" ]]; then
+		echo "Creating container '${container_name}' starting."
 		docker run \
-			--name "${CONTAINER_NAME}" \
+			--name "${container_name}" \
 			--interactive \
 			--tty \
 			--privileged \
 			--net=host \
-			--host="${HOSTNAME}" \
-			--env LOCAL_USER="$(id -u):$(id -g)" \
+			--hostname="${host_name}" \
+			--user="$(id -u):$(id -g)" \
 			--env DISPLAY \
 			--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro" \
-			--volume "${SCRIPT_DIR}/apt-repo:/root/apt-repo:ro" \
+			--volume "${script_dir}/project:/project:rw" \
 			--detach \
-			"${IMG_NAME}"
+			"${img_name}"
 	# When the container exists and is not running restart it.
-	elif [[ "${STATUS}" =~ ^Exited ]]; then
-		echo "Restarting container '${CONTAINER_NAME}'."
-		docker restart "${CONTAINER_NAME}"
-	elif [[ "${STATUS}" =~ ^Up ]]; then
-		echo "Container '${CONTAINER_NAME}' is running '${STATUS}'."
+	elif [[ "${status}" =~ ^Exited ]]; then
+		echo "Restarting container '${container_name}'."
+		docker restart "${container_name}"
+	elif [[ "${status}" =~ ^Up ]]; then
+		echo "Container '${container_name}' is running '${status}'."
 	else
-		echo "Container '${CONTAINER_NAME}' has unexpected status '${STATUS}'!"
+		echo "Container '${container_name}' has unexpected status '${status}'!"
 		exit 1
 	fi
 	# Get the container status again and it needs to be 'Up' to b enable to attach to it.
@@ -53,23 +53,22 @@ function run_container {
 		docker exec \
 			--interactive \
 			--tty \
-			--env LOCAL_USER="$(id -u):$(id -g)" \
 			--env DISPLAY \
-			"${CONTAINER_NAME}" "${@}"
+			"${container_name}" "${@}"
 	else
-		echo "Failed to attach to container '${CONTAINER_NAME}'."
+		echo "Failed to attach to container '${container_name}'."
 	fi
 }
 
 # Stop or kill the container.
 if [[ $# -eq 1 && ("${1}" == "stop" || "${1}" == "kill") ]]; then
 	# Stop this docker container only.
-	cntr_id="$(docker ps --filter name="${CONTAINER_NAME}" --quiet)"
+	cntr_id="$(docker ps --filter name="${container_name}" --quiet)"
 	if [[ -n "${cntr_id}" ]]; then
 		echo "Container ID is '${cntr_id}' and performing '${1}' command."
 		docker "${1}" "${cntr_id}"
 	else
-		echo "Container '${CONTAINER_NAME}' is not running."
+		echo "Container '${container_name}' is not running."
 	fi
 else
 	# By default run bash.

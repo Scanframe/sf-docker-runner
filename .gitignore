@@ -4,6 +4,7 @@
 .nexus-credentials
 .minio-credentials
 .qt-lib-dir
+.win-app-dir
 gitlab-runner/config/config.toml
 gitlab-runner/config/.runner_system_id
 minio/data

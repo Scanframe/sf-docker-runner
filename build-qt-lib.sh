@@ -29,7 +29,7 @@ else
 fi
 
 # Qt repository URL.
-qt_repo=https://code.qt.io/qt/qt5.git
+qt_repo="https://code.qt.io/qt/qt5.git"
 # Directory to eventually ZIP.
 lib_dir="$(realpath "${run_dir}/../${os_code}-$(uname -m)")"
 # Install directory for cmake.
@@ -66,29 +66,30 @@ function show_help {
 	echo "Used to build the Qt framework libraries from source."
 	report
 	echo "Available commands:
-  help         : Shows this help.
-  run          : Run the Docker container for this script to execute.
-  start        : Start the Docker container for this script to execute in the background.
-  stop         : Stop the Docker container for this script to execute in the background.
-  attach       : Attach to the Docker container for this script to execute in the background.
-  doc          : Open documentation web-pages.
-  deps         : Install dependencies needed to build.
-  clone        : Clone the Qt repository from '${qt_repo}' at branch 'v${qt_ver}'.
-  update       : Update the existing repository.
-  init         : Initialize the Git repositories.
-  conf-help    : Show configure help.
-  feat-help    : Show all possible features.
-  conf         : Configure cmake.
-  sum          : Show the summary of enabled features.
-  check        : Check if the features are set (e.g. 'system_xcb_xinput') and if 'fix' command is to be called.
-  fix          : Sets the feature(s) by modifying 'CMakeCache.txt' still not being set using the -feature-???? option.
-  check        : Shows the required features from CMakeCache.txt and allows checking for 'ON'.
-                 Also displays the '${install_dir}/plugins/platforms/' to see if 'libqxcb.so' is build.
-  redo         : Calls the configuration with the '-redo' option where previous are used.
-  ccmake       : Run 'ccmake' command in the build directory.
-  build        : Calls the cmake build to compile the libraries/framework
-  install      : Install the build in the reported library directory.
-  zip          : Creates a zip-file from the library directory for upload to Nexus for download in Docker images.
+  help      : Shows this help.
+  tags      : Show the tags of the remote repository.
+  run       : Run the Docker container for this script to execute.
+  start     : Start the Docker container for this script to execute in the background.
+  stop      : Stop the Docker container for this script to execute in the background.
+  attach    : Attach to the Docker container for this script to execute in the background.
+  doc       : Open documentation web-pages.
+  deps      : Install dependencies needed to build.
+  clone     : Clone the Qt repository from '${qt_repo}' at branch 'v${qt_ver}'.
+  update    : Update the existing repository.
+  init      : Initialize the Git repositories.
+  conf-help : Show configure help.
+  feat-help : Show all possible features.
+  conf      : Configure cmake.
+  sum       : Show the summary of enabled features.
+  check     : Check if the features are set (e.g. 'system_xcb_xinput') and if 'fix' command is to be called.
+  fix       : Sets the feature(s) by modifying 'CMakeCache.txt' still not being set using the -feature-???? option.
+  check     : Shows the required features from CMakeCache.txt and allows checking for 'ON'.
+              Also displays the '${install_dir}/plugins/platforms/' to see if 'libqxcb.so' is build.
+  redo      : Calls the configuration with the '-redo' option where previous are used.
+  ccmake    : Run 'ccmake' command in the build directory.
+  build     : Calls the cmake build to compile the libraries/framework
+  install   : Install the build in the reported library directory.
+  zip       : Creates a zip-file from the library directory for upload to Nexus for download in Docker images.
 
 Steps to build Qt v${qt_ver} in order are:
   deps, clone, init, conf, build, install ,zip
@@ -216,6 +217,11 @@ case $1 in
 	run | start | stop | attach)
 		# Run Docker image without a Qt version configured.
 		"${run_dir}/cpp-builder.sh" --qt-ver '' --project "${run_dir}/../../../applications/library/qt" "$@"
+		exit 0
+		;;
+
+	tags)
+		git ls-remote --tags "${qt_repo}" | grep --invert-match '\^{}$' | pcregrep -o1 '^[^ ]+\s+refs/tags/([^\s]+)$'
 		exit 0
 		;;
 

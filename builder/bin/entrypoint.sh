@@ -52,7 +52,42 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			WriteLog "Importing registry file '${HOME}/import.reg'."
 			sudo --user=user wine regedit "${HOME}/import.reg" 2>/dev/null
 		fi
+		# Directory of the zipped Wine applications.
+		wine_apps_zip_dir="/opt/wine-apps"
+		# Check if the 'dosdevices' directory is created by 'wineboot' and zipped apps are available.
+		if [[ -d "${WINEPREFIX}/dosdevices/" && -d "${wine_apps_zip_dir}" ]]; then
+			# Directory to mount them in and to create ad drive 'P:'.
+			base_app_dir="/mnt/drive_p"
+			# Check if the directory already exists through a docker volume mount.
+			if [[ -d "${base_app_dir}" ]]; then
+				WriteLog "Directory '${base_app_dir}' exists as mounted volume."
+			else
+				# Create the directory mounted as drive P: in Wine.
+				sudo mkdir "${base_app_dir}" && sudo chown user:user "${base_app_dir}"
+				while read -r zip_file_path; do
+					# Strip the directory from the path.
+					zip_file="$(basename "${zip_file_path}")"
+					# Strip the zip-extension from the filename.
+					app_dir="${base_app_dir}/${zip_file%.*}"
+					# Create the application directory for mounting on.
+					if mkdir --parent "${app_dir}" && sudo chown user:user "${app_dir}"; then
+						if ! fuse-zip -o rw,nonempty,allow_other "${zip_file_path}" "${app_dir}"; then
+							WriteLog "Mounting Wine application zip-file '${zip_file}' onto '${app_dir}' failed!"
+						fi
+					fi
+				done < <(find "${wine_apps_zip_dir}" -maxdepth 1 -type f -name "*.zip")
+			fi
+			echo "Creating drive P: for the Borland C++ Builder application and tools from a mounted volume."
+			sudo -- ln --symbolic "/mnt/drive_p" "${WINEPREFIX}/dosdevices/p:" && sudo chown --no-dereference 'user:user' "${WINEPREFIX}/dosdevices/p:"
+			# Determine if project directory is shared.
+			if [[ -d /mnt/project ]]; then
+				# Create N-drive for the project.
+				echo "Creating drive N: for the project to mount on or to clone into."
+				sudo -- ln --symbolic "/mnt/project" "${WINEPREFIX}/dosdevices/n:" && sudo chown --no-dereference 'user:user' "${WINEPREFIX}/dosdevices/n:"
+			fi
+		fi
 	fi
+
 	# Check if the Qt zipped libraries are available.
 	if [[ -d "/usr/local/lib/qt" ]]; then
 		WriteLog "Qt zipped library is available."
@@ -62,7 +97,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		# Keep track the qt version dirs of each mounted zip-file.
 		declare -A arch_qt_ver_dir
 		# Iterate through all the qt-*.zip files and mount them at the correct places.
-		for zip_file in ls "${HOME}/qt-"*.zip; do
+		for zip_file in "${HOME}/qt-"*.zip; do
 			if [[ "$(basename "${zip_file}")" =~ ^qt-((lnx|win)-([a-z_0-9]*))\.zip$ ]]; then
 				mount_dir="${HOME}/lib/qt/${BASH_REMATCH[1]}"
 				if mkdir --parent "${mount_dir}"; then
@@ -82,12 +117,23 @@ if [[ "$(id -u)" -eq 0 ]]; then
 				ln -rs "${arch_qt_ver_dir['lnx-x86_64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec"
 		fi
 	fi
+
 	WriteLog "Working directory: $(pwd)"
 	# Check if the host has the X11 display passed.
 	if [[ -n "${DISPLAY}" && -f "${HOME}/.Xauthority" ]]; then
 		# Create file for profile to import to be used when running sshd.
 		echo "export DISPLAY=${DISPLAY}" >"${HOME}/.display.sh"
 	fi
+	# Prevent any errors when resolving git tags.
+	git config --global --add safe.directory '*'
+	#	cat <<EOD > "${HOME}/.gitconfig"
+	#[user]
+	#    email = user@exmaple.com
+	#    name = User Example
+	#[safe]
+	#    directory = *
+	#EOD
+
 	# Execute CMD passed by the user when starting the image.
 	if [[ $# -ne 0 ]]; then
 		WriteLog "Calling command:" "${@}"

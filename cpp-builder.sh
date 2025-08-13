@@ -46,7 +46,7 @@ function show_help {
 	# Get only the filename of the current script.
 	cmd_name="$(basename "${0}")"
 	echo "Usage: ${cmd_name} [<options>] <command>
-  Execute an actions for docker and/or it's container.
+  Execute an action for docker and/or it's container.
 
   Options:
     -h, --help    : Show this help.
@@ -79,7 +79,7 @@ function show_help {
     status          : Return the status of named '${container_name}' the container running in the background.
     attach          : Attaches to the  in the background running container named '${container_name}'.
     versions        : Shows versions of most installed applications within the container.
-    docker-push     : Push '${container_name}' to userspace '${DOCKER_USER}' on docker.com."
+    docker-push     : Push '${container_name}:${base_img_tag}' to userspace '${DOCKER_USER}' on docker.com."
 	"${script_dir}/nexus-docker.sh" --help-short
 	echo "  Examples:
     ARM 64-bit no Qt library installed.
@@ -89,7 +89,7 @@ function show_help {
     The same as above but not using the defaults.
       ./${cmd_name} --base-image amd64/ubuntu --platform amd64 --qt-ver 'max' build
 
-   Notes:
+  Notes:
      The file '.qt-lib-dir' overrides the default Qt framework's location of '${qt_lib_dir}'.
 "
 }
@@ -387,11 +387,12 @@ case "${cmd}" in
 		;;
 
 	docker-push)
-		docker_img_name="${DOCKER_USER}/${img_name%%:*}"
+		docker_img_name="${DOCKER_USER}/${platform}-${img_name%%:*}"
 		# Add tag to having the correct prefix so it can be pushed to a private repository.
-		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${platform}/${docker_img_name}"
+		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${docker_img_name}"
+		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${docker_img_name}:${img_tag}"
 		# Push the repository.
-		docker image push "${docker_img_name}"
+		docker image push "${docker_img_name}:${img_tag}"
 		;;
 
 	pull)
