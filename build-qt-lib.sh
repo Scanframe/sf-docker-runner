@@ -18,12 +18,12 @@ if [[ "${os_name}" == "Cygwin" ]]; then
 	os_code="w64"
 	repo_dir="qt-win"
 	# Qt version to compile.
-	qt_ver="6.8.1"
+	qt_ver="6.9.1"
 	git_cmd='/cygdrive/c/Program Files/Git/cmd/git.exe'
 else
 	os_code="lnx"
 	repo_dir="qt-lnx"
-	qt_ver="6.8.1"
+	qt_ver="6.9.1"
 	#qt_ver="6.7.2"
 	git_cmd='git'
 fi
@@ -32,14 +32,16 @@ fi
 qt_repo="https://code.qt.io/qt/qt5.git"
 # Directory to eventually ZIP.
 lib_dir="$(realpath "${run_dir}/../${os_code}-$(uname -m)")"
+# Build directory.
+build_dir="${run_dir}/build-${os_code}-$(uname -m)"
 # Install directory for cmake.
 if [[ "${os_name}" == "Cygwin" ]]; then
 	install_dir="${lib_dir}/${qt_ver}/mingw_64"
+	build_dir="${TEMP}/build-${os_code}-$(uname -m)"
+	repo_dir="${TEMP}/${repo_dir}"
 else
 	install_dir="${lib_dir}/${qt_ver}/gcc_64"
 fi
-# Build directory.
-build_dir="${run_dir}/build-${os_code}-$(uname -m)"
 # Form the zip-filepath using the found or set Qt version.
 zip_file_base="${run_dir}/qt-${os_code}-$(uname -m)-${qt_ver}"
 zip_file="${zip_file_base}.zip"
@@ -58,7 +60,10 @@ Build Directory   : ${build_dir}
 Library Directory : ${lib_dir}
 Install Directory : ${install_dir}
 Zip file          : ${zip_file}
-Git:              : ${git_cmd}
+Git Command       : ${git_cmd}
+Windows Tools File: ${tools_dir_file}
+Windows Tools Dir : ${tools_dir}
+
 "
 }
 
@@ -184,7 +189,6 @@ lnx_pkgs+=(libsm-dev)
 # Detect windows using the cygwin 'uname' command.
 if [[ "${os_name}" == "Cygwin" ]]; then
 	tools_dir_file="${run_dir}/.tools-dir-$(uname -n)"
-	WriteLog "# Cygwin tools location file: $(basename "${tools_dir_file}")"
 	# Check if the tools directory file exists.
 	if [[ -f "${tools_dir_file}" ]]; then
 		# Read the first line of the file and strip the newline.
@@ -274,14 +278,22 @@ case $1 in
 		if [[ -f "${repo_dir}/README.md" ]]; then
 			WriteLog "Already cloned: v${qt_ver} ${qt_repo} ${repo_dir}"
 		else
-			"${git_cmd}" clone --branch v${qt_ver} "${qt_repo}" "${repo_dir}/"
+			if [[ "${os_name}" == "Cygwin" ]]; then
+				"${git_cmd}" clone --branch v${qt_ver} "${qt_repo}" "$(cygpath -w "${repo_dir}")/"
+			else
+				"${git_cmd}" clone --branch v${qt_ver} "${qt_repo}" "${repo_dir}/"
+			fi
 		fi
 		;;
 
 	update)
 		report
 		# Update recursively.
-		"${git_cmd}" -C "${repo_dir}" submodule update --init --recursive
+		if [[ "${os_name}" == "Cygwin" ]]; then
+			"${git_cmd}" -C "$(cygpath -w "${repo_dir}")" submodule update --init --recursive
+		else
+			"${git_cmd}" -C "${repo_dir}" submodule update --init --recursive
+		fi
 		;;
 
 	init)
@@ -363,7 +375,7 @@ Enable/Disable feature using options:
 		mkdir -p "${build_dir}"
 		pushd "${build_dir}" >/dev/null
 		if [[ "${os_name}" == "Cygwin" ]]; then
-			conf_cmd=(cmd /c "$(cygpath -w "${run_dir}/${repo_dir}/configure.bat")")
+			conf_cmd=(cmd /c "$(cygpath -w "${repo_dir}/configure.bat")")
 			#conf_cmd=("../${repo_dir}/configure.bat")
 			conf_cmd+=(-prefix "$(cygpath -w "${install_dir}")")
 		else

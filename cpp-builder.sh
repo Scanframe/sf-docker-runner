@@ -27,6 +27,8 @@ qt_lib_dir="${HOME}/lib/qt"
 raw_lib_offset="repository/shared/library"
 # Initialize Qt version library to find the highest version available.
 qt_ver='max'
+# Pauses the script before executing a command.
+flag_pause=true
 # When running from a 'aarch64' machine set some other defaults.
 if [[ "$(uname -m)" == 'aarch64' ]]; then
 	base_img_name='arm64v8/ubuntu'
@@ -49,12 +51,13 @@ function show_help {
   Execute an action for docker and/or it's container.
 
   Options:
-    -h, --help    : Show this help.
-    -p, --project : Project directory which is mounted in '/mnt/project' and has a symlink '~/project'.
-    --base-image  : Defaults to '${base_img_name}' available is also 'arm64v8/ubuntu'.
-    --base-ver    : Version/tag of the base image which defaults to '${base_img_tag}' for base image '${base_img_name}'.
-    --platform    : Platform defaults to '${platform}' available is also 'arm64'.
-    --qt-ver      : Version of the the Qt library to instead of newest one available.
+    -h, --help     : Show this help.
+    -p, --project  : Project directory which is mounted in '/mnt/project' and has a symlink '~/project'.
+    --base-image   : Defaults to '${base_img_name}' available is also 'arm64v8/ubuntu'.
+    --base-ver     : Version/tag of the base image which defaults to '${base_img_tag}' for base image '${base_img_name}'.
+    --platform     : Platform defaults to '${platform}' available is also 'arm64'.
+    --qt-ver       : Version of the the Qt library to instead of newest one available.
+    -y, --yes      : No questions asked to perform the command.
 
   Commands:
     build           : Builds the docker image tagged '${img_name}:${img_tag}' for self-hosted Nexus repository and requires zipped Qt libraries.
@@ -79,7 +82,8 @@ function show_help {
     status          : Return the status of named '${container_name}' the container running in the background.
     attach          : Attaches to the  in the background running container named '${container_name}'.
     versions        : Shows versions of most installed applications within the container.
-    docker-push     : Push '${container_name}:${base_img_tag}' to userspace '${DOCKER_USER}' on docker.com."
+    docker-push     : Push '${container_name}:${base_img_tag}' to userspace '${DOCKER_USER}' on docker.com.
+    docker-latest   : Push '${container_name}' getting the tag 'latest' to the userspace '${DOCKER_USER}' on Docker Hub."
 	"${script_dir}/nexus-docker.sh" --help-short
 	echo "  Examples:
     ARM 64-bit no Qt library installed.
@@ -118,7 +122,7 @@ docker_file="${work_dir}/cpp.Dockerfile"
 cd "${script_dir}" || exit 1
 
 # Parse options.
-temp=$(getopt -o 'hp:' --long 'help,platform:,base-image:,project:,base-ver:,qt-ver:' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hp:y' --long 'help,platform:,base-image:,project:,base-ver:,qt-ver:,yes' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	show_help
@@ -133,6 +137,11 @@ while true; do
 		-h | --help)
 			show_help
 			exit 0
+			;;
+
+		-y | --yes)
+			flag_pause=false
+			shift
 			;;
 
 		--base-image)
@@ -154,9 +163,11 @@ while true; do
 			if [[ "${platform}" == 'arm64' && "${base_img_name}" =~ ^amd64 ]]; then
 				base_img_name='arm64v8/ubuntu'
 				WriteLog "Defaulting platform '${platform}' to base image '${base_img_name}'."
+				architecture='aarch64'
 			elif [[ "${platform}" == 'amd64' && "${base_img_name}" =~ ^arm64 ]]; then
 				base_img_name='amd64/ubuntu'
 				WriteLog "Defaulting platform '${platform}' to base image '${base_img_name}'."
+				architecture='x86_64'
 			fi
 			continue
 			;;
@@ -225,6 +236,25 @@ cmd=""
 if [[ $# -gt 0 ]]; then
 	cmd="$1"
 	shift
+fi
+
+if [[ -n "${cmd}" ]]; then
+	WriteLog "
+	Qt version           : ${qt_ver}
+	Targeted Platform    : ${platform}
+	Architecture         : ${architecture}
+	Base image tag       : ${base_img_tag}
+	Base image name      : ${base_img_name}
+	Image tag            : ${img_tag}
+	Image name           : ${img_name}
+	Container name       : ${container_name}
+	Temporary directory  : ${temp_dir}
+	Qt library directory : ${qt_lib_dir}
+	Nexus relative path  : ${raw_lib_offset}
+	"
+	${flag_pause} && read -rp "Continue with command '${cmd}' [y/N]?" && if [[ $REPLY != [yY] ]]; then
+		exit 0
+	fi
 fi
 
 case "${cmd}" in
@@ -389,10 +419,17 @@ case "${cmd}" in
 	docker-push)
 		docker_img_name="${DOCKER_USER}/${platform}-${img_name%%:*}"
 		# Add tag to having the correct prefix so it can be pushed to a private repository.
-		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${docker_img_name}"
 		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${docker_img_name}:${img_tag}"
 		# Push the repository.
 		docker image push "${docker_img_name}:${img_tag}"
+		;;
+
+	docker-latest)
+		docker_img_name="${DOCKER_USER}/${platform}-${img_name%%:*}"
+		# Add tag to having the correct prefix so it can be pushed to a private repository.
+		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${docker_img_name}"
+		# Push the repository as latest.
+		docker image push "${docker_img_name}"
 		;;
 
 	pull)
@@ -473,7 +510,7 @@ case "${cmd}" in
 		dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
 		dckr_cmd+=(--volume "${script_dir}:/mnt/script:ro")
 		dckr_cmd+=(--workdir "/mnt/project/")
-		if [[ "${cmd}" == "start"  || "${cmd}" == "startx" ]]; then
+		if [[ "${cmd}" == "start" || "${cmd}" == "startx" ]]; then
 			dckr_cmd+=(--detach)
 			"${dckr_cmd[@]}" "${platform}/${img_name}:${img_tag}" sudo -- /usr/sbin/sshd -e -D -p 3022
 		else
@@ -507,10 +544,13 @@ case "${cmd}" in
 		;;
 
 	*)
-		if "${script_dir}/nexus-docker.sh" "${cmd}"; then
-			exit 0
+		# When a command is given.
+		if [[ -n "${cmd}" ]]; then
+			if "${script_dir}/nexus-docker.sh" "${cmd}"; then
+				exit 0
+			fi
+			WriteLog "Command '${cmd}' is invalid!!!"
 		fi
-		WriteLog "Command '${cmd}' is invalid!"
 		show_help
 		exit 1
 		;;

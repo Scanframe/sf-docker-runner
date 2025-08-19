@@ -1,3 +1,5 @@
+/progress
+/.tools-dir-*
 /builder/apt-repo-gpg/*
 /builder/wine-reg/*
 .idea
