@@ -13,6 +13,23 @@ cd "${run_dir}"
 
 # Determine the OS name.
 os_name="$(uname -o)"
+# Qt repository URL.
+qt_repo="https://code.qt.io/qt/qt5.git"
+
+function WriteLog {
+	echo "$@" 1>&2
+}
+
+# Install base directory for this machine.
+dir_file="${run_dir}/.install-dir-$(uname -n)"
+# Check if the directory file exists.
+if [[ -f "${dir_file}" ]]; then
+	# Read the first line of the file and strip the newline.
+	lib_base_dir="$(head -n 1 "${dir_file}" | tr -d '\n' | tr -d '\n' | tr -d '\r')"
+	WriteLog "# Library base directory set to: ${lib_base_dir}"
+else
+	lib_base_dir="$(realpath "${run_dir}/..")"
+fi
 
 if [[ "${os_name}" == "Cygwin" ]]; then
 	os_code="w64"
@@ -24,14 +41,11 @@ else
 	os_code="lnx"
 	repo_dir="qt-lnx"
 	qt_ver="6.9.1"
-	#qt_ver="6.7.2"
 	git_cmd='git'
 fi
 
-# Qt repository URL.
-qt_repo="https://code.qt.io/qt/qt5.git"
 # Directory to eventually ZIP.
-lib_dir="$(realpath "${run_dir}/../${os_code}-$(uname -m)")"
+lib_dir="${lib_base_dir}/${os_code}-$(uname -m)"
 # Build directory.
 build_dir="${run_dir}/build-${os_code}-$(uname -m)"
 # Install directory for cmake.
@@ -46,24 +60,41 @@ fi
 zip_file_base="${run_dir}/qt-${os_code}-$(uname -m)-${qt_ver}"
 zip_file="${zip_file_base}.zip"
 
-function WriteLog {
-	echo "$@" 1>&2
-}
+# Detect windows using the cygwin 'uname' command.
+if [[ "${os_name}" == "Cygwin" ]]; then
+	# Tools directory for this machine.
+	dir_file="${run_dir}/.tools-dir-$(uname -n)"
+	# Check if the directory file exists.
+	if [[ -f "${dir_file}" ]]; then
+		# Read the first line of the file and strip the newline.
+		tools_dir="$(head -n 1 "${dir_file}" | tr -d '\n' | tr -d '\n' | tr -d '\r')"
+		if [[ -d "${tools_dir}" ]]; then
+			export PATH="${tools_dir}:${PATH}"
+			WriteLog "# Tools directory added to PATH: ${tools_dir}"
+		else
+			WriteLog "# Non-existing tools directory: ${tools_dir}"
+		fi
+	else
+		WriteLog "# No tools directory specified!"
+	fi
+elif [[ "${os_name}" == "GNU/Linux" ]]; then
+	WriteLog "# Linux $(uname -m) detected"
+else
+	WriteLog "Targeted OS '${os_name}' not supported!"
+fi
 
 function report {
 	echo "
 Operating System  : ${os_name}
-Qt Repository     : ${qt_repo}
-Qt Version Branch : v${qt_ver}
+Qt Repository     : ${qt_repo} (v${qt_ver})
 Run directory     : ${run_dir}
 Build Directory   : ${build_dir}
 Library Directory : ${lib_dir}
 Install Directory : ${install_dir}
 Zip file          : ${zip_file}
 Git Command       : ${git_cmd}
-Windows Tools File: ${tools_dir_file}
+Windows Tools File: ${dir_file}
 Windows Tools Dir : ${tools_dir}
-
 "
 }
 
@@ -88,8 +119,7 @@ function show_help {
   sum       : Show the summary of enabled features.
   check     : Check if the features are set (e.g. 'system_xcb_xinput') and if 'fix' command is to be called.
   fix       : Sets the feature(s) by modifying 'CMakeCache.txt' still not being set using the -feature-???? option.
-  check     : Shows the required features from CMakeCache.txt and allows checking for 'ON'.
-              Also displays the '${install_dir}/plugins/platforms/' to see if 'libqxcb.so' is build.
+  check     : Shows the required features from CMakeCache.txt and allows checking for 'ON' to build 'libqxcb.so'.
   redo      : Calls the configuration with the '-redo' option where previous are used.
   ccmake    : Run 'ccmake' command in the build directory.
   build     : Calls the cmake build to compile the libraries/framework
@@ -186,25 +216,6 @@ lnx_pkgs+=(wayland-protocols)
 lnx_pkgs+=(zlib1g-dev)
 lnx_pkgs+=(libsm-dev)
 
-# Detect windows using the cygwin 'uname' command.
-if [[ "${os_name}" == "Cygwin" ]]; then
-	tools_dir_file="${run_dir}/.tools-dir-$(uname -n)"
-	# Check if the tools directory file exists.
-	if [[ -f "${tools_dir_file}" ]]; then
-		# Read the first line of the file and strip the newline.
-		tools_dir="$(head -n 1 "${tools_dir_file}" | tr -d '\n' | tr -d '\n' | tr -d '\r')"
-		if [[ -d "${tools_dir}" ]]; then
-			export PATH="${tools_dir}:${PATH}"
-			WriteLog "# Tools directory added to PATH: ${tools_dir}"
-		else
-			WriteLog "# Non-existing tools directory: ${tools_dir}"
-		fi
-	fi
-elif [[ "${os_name}" == "GNU/Linux" ]]; then
-	WriteLog "# Linux $(uname -m) detected"
-else
-	WriteLog "Targeted OS '${os_name}' not supported!"
-fi
 
 if [[ "$#" -eq 0 ]]; then
 	show_help
@@ -463,13 +474,6 @@ Enable/Disable feature using options:
 		popd >/dev/null
 		;;
 
-	tbuild)
-		report
-		pushd "${build_dir}" >/dev/null
-		cmake --build . --parallel --target "libQt6Designer.so"
-		popd >/dev/null
-		;;
-
 	install)
 		if [[ -d "${lib_dir}/${qt_ver}" ]]; then
 			echo "Renaming version directory '${lib_dir}/${qt_ver}' first."
@@ -482,9 +486,6 @@ Enable/Disable feature using options:
 
 	check)
 		grep --perl-regexp "^(QT_|)FEATURE_(system_xcb_xinput|ccache):" "${build_dir}/CMakeCache.txt"
-		if [[ -d "${install_dir}/plugins/platforms/" ]]; then
-			ls -la "${install_dir}/plugins/platforms/"
-		fi
 		;;
 
 	zip)
