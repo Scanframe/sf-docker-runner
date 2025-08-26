@@ -168,4 +168,4 @@ using multiple command steps:
 
 See also the [Qt from source](doc/qt-from-source.md) document.
 
-::include{file=doc/cpp-build-process.puml}
+::include{file=doc/cpp-builder-process.puml}
