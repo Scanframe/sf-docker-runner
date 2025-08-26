@@ -1,0 +1,100 @@
+@startuml
+title = C++ Build Docker Images Process\nWith and Without Qt Libraries;
+
+skinparam activity {
+	StartColor #4C9AFF
+	EndColor #4C9AFF
+	BackgroundColor #F7F9FC
+	BorderColor #5E6C84
+}
+skinparam partition {
+	BackgroundColor #FFFFFF
+	BorderColor #A5ADBA
+}
+skinparam noteBackgroundColor #FFF8E1
+skinparam noteBorderColor #FFAB00
+
+
+start
+:= Create C++ Builder images
+using [[https://git.scanframe.com/docker/gitlab-runner/-/blob/main/cpp-builder.sh cpp-builder.sh]] script
+//(Optionally for building Qt applications)//;
+
+
+partition "= Base Image\n//(Secure in private registry)//" {
+	:Select upstream base image(s)\n//(e.g., amd64/ubuntu:24.04)//;
+	fork
+		:Pull for amd64;
+	fork again
+		:Pull for arm64/aarch64;
+	end fork
+	:Tag as <private-registry>/<arch>/<base>:<os-ver>\n//(e.g., nexus.scanframe.com/amd64/ubuntu:24.04)//;
+	:Push to the private registry;
+	note right
+		Result: Trusted, versioned base
+		available internally per architecture.
+	end note
+}
+
+partition "= C++ Builder Image\n//(For building the Qt framework)//" {
+	:Build "C++toolchain" image from internal base\n//(e.g. amd64/ubuntu:24.04)//;
+	:Run image build script\nwhich installs all required build tools.\n //(like: gcc/g++, cmake, ninja, gdb, clang-format,//\n//MinGW cross, aarch64 cross, Python3, etc.)//;
+	:Push C++ builder image to private registry\n//(e.g. nexus.scanframe.com/amd64/ubuntu:24.04)//;
+	note right
+		Purpose: Reusable base to build Qt from source
+		inside containers and to build non‑Qt apps.
+	end note
+}
+
+partition "= Prepare Qt Libraries\n//(Artifacts in Private Storage)//" {
+	fork
+		partition "== Linux Qt\n//(containerized)//" {
+			:Start container from\nnon‑Qt builder\nper architecture;
+			:Run Qt library\nbuild [[https://git.scanframe.com/docker/gitlab-runner/-/blob/main/build-qt-lib.sh script]] commands;
+			note right
+			A subprocess
+			end note
+		}
+	fork again
+		partition "== Windows Qt\n//(native, no Docker)//" {
+			:Install [[https://git.scanframe.com/shared/bin-bash Cygwin and Scripts]];
+			:Install [[https://download.qt.io/development_releases/prebuilt/mingw_64/ GNU posix-seh ]]\ntoolchain;
+			:Run Qt library\nbuild [[https://git.scanframe.com/docker/gitlab-runner/-/blob/main/build-qt-lib.sh script]] commands;
+			note right
+			A subprocess
+			end note
+		}
+	end fork
+	:Create Linux Qt Windows cross compile libraries\n[[https://git.scanframe.com/library/cmake-lib/-/blob/main/bin/qt-cross-windows-fix.sh Cross Windows Fix Script]];
+	note right
+	4 Qt framework OS/architecture
+	directories are readied.
+	===============================
+	# Linux amd64: **lnx-x86_64**
+	# Linux arm64: **lnx-aarch64**
+	# Windows amd64: **w64-x86_64**
+	# Cross Windows amd64: **win-x86_64**
+	end note
+	:Upload Qt libraries to [[https://nexus.scanframe.com/#browse/browse:shared:library%2Fqt Nexus]] private storage;
+}
+
+partition "=C++ Qt Builder Images\n//(containerized)//" {
+	:Build Qt-enabled image(s) per arch from non‑Qt base;
+	:Fetch Qt zips from private storage
+	([[https://nexus.scanframe.com/#browse/browse:shared:library%2Fqt lnx-x86_64, lnx-aarch64, win-x86_64]])
+	and are mounted as [[https://linux.die.net/man/1/fuse-zip filesystem]];
+	:Push Qt C++ Builder image(s) to the [[https://nexus.scanframe.com/#browse/browse:docker-image:v2%2Famd64%2Fgnu-cpp%2Ftags private registry]];
+}
+
+partition "= Mirror/Publish\n//Docker Hub//" {
+	note right
+		Optional
+	end note
+	:Login to Docker Hub (CI secret);
+	:Push images per architecture;
+	:Optionally push 'latest' tag;
+	:Update SBOM in public registry;
+}
+
+stop
+@enduml

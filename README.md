@@ -166,4 +166,6 @@ using multiple command steps:
 6. Installing the libraries into the correct named Qt version directory for projects.
 7. Zipping the version for mounting in a Qt-versioned Docker Qt build container.
 
-See [Qt from source](doc/qt-from-source.md) document.
+See also the [Qt from source](doc/qt-from-source.md) document.
+
+::include{file=doc/cpp-build-process.puml}
