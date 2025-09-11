@@ -31,76 +31,19 @@ else
 	lib_base_dir="$(realpath "${run_dir}/..")"
 fi
 
-if [[ "${os_name}" == "Cygwin" ]]; then
-	os_code="w64"
-	repo_dir="qt-win"
-	# Qt version to compile.
-	qt_ver="6.9.1"
-	git_cmd='/cygdrive/c/Program Files/Git/cmd/git.exe'
-else
-	os_code="lnx"
-	repo_dir="qt-lnx"
-	qt_ver="6.9.1"
-	git_cmd='git'
-fi
+# Initial Qt version to compile.
+qt_ver="6.9.1"
 
-# Directory to eventually ZIP.
-lib_dir="${lib_base_dir}/${os_code}-$(uname -m)"
-# Build directory.
-build_dir="${run_dir}/build-${os_code}-$(uname -m)"
-# Install directory for cmake.
-if [[ "${os_name}" == "Cygwin" ]]; then
-	install_dir="${lib_dir}/${qt_ver}/mingw_64"
-	build_dir="${TEMP}/build-${os_code}-$(uname -m)"
-	repo_dir="${TEMP}/${repo_dir}"
-else
-	install_dir="${lib_dir}/${qt_ver}/gcc_64"
-fi
-# Form the zip-filepath using the found or set Qt version.
-zip_file_base="${run_dir}/qt-${os_code}-$(uname -m)-${qt_ver}"
-zip_file="${zip_file_base}.zip"
-
-# Detect windows using the cygwin 'uname' command.
-if [[ "${os_name}" == "Cygwin" ]]; then
-	# Tools directory for this machine.
-	dir_file="${run_dir}/.tools-dir-$(uname -n)"
-	# Check if the directory file exists.
-	if [[ -f "${dir_file}" ]]; then
-		# Read the first line of the file and strip the newline.
-		tools_dir="$(head -n 1 "${dir_file}" | tr -d '\n' | tr -d '\n' | tr -d '\r')"
-		if [[ -d "${tools_dir}" ]]; then
-			export PATH="${tools_dir}:${PATH}"
-			WriteLog "# Tools directory added to PATH: ${tools_dir}"
-		else
-			WriteLog "# Non-existing tools directory: ${tools_dir}"
-		fi
-	else
-		WriteLog "# No tools directory specified!"
-	fi
-elif [[ "${os_name}" == "GNU/Linux" ]]; then
-	WriteLog "# Linux $(uname -m) detected"
-else
-	WriteLog "Targeted OS '${os_name}' not supported!"
-fi
-
-function report {
-	echo "
-Operating System  : ${os_name}
-Qt Repository     : ${qt_repo} (v${qt_ver})
-Run directory     : ${run_dir}
-Build Directory   : ${build_dir}
-Library Directory : ${lib_dir}
-Install Directory : ${install_dir}
-Zip file          : ${zip_file}
-Git Command       : ${git_cmd}
-Windows Tools File: ${dir_file}
-Windows Tools Dir : ${tools_dir}
-"
-}
+# Initialize the cross-compile flag.
+flag_cross=false
 
 function show_help {
 	echo "Used to build the Qt framework libraries from source."
 	report
+	echo "Available options:
+  -w, --windows : Crosscompile for Windows flag (all commands)
+  --qt-ver      : Qt version to compile (only for clone command).
+"
 	echo "Available commands:
   help      : Shows this help.
   tags      : Show the tags of the remote repository.
@@ -110,11 +53,13 @@ function show_help {
   attach    : Attach to the Docker container for this script to execute in the background.
   doc       : Open documentation web-pages.
   deps      : Install dependencies needed to build.
+  local     : Creates a symlink to local tmp directory to clone the source into for faster compiling.
   clone     : Clone the Qt repository from '${qt_repo}' at branch 'v${qt_ver}'.
   update    : Update the existing repository.
   init      : Initialize the Git repositories.
   conf-help : Show configure help.
   feat-help : Show all possible features.
+  conf-help : Show available configuration options.
   conf      : Configure cmake.
   sum       : Show the summary of enabled features.
   check     : Check if the features are set (e.g. 'system_xcb_xinput') and if 'fix' command is to be called.
@@ -130,6 +75,47 @@ Steps to build Qt v${qt_ver} in order are:
   deps, clone, init, conf, build, install ,zip
 "
 }
+
+# Parse options.
+temp=$(getopt -o 'hw' --long 'help,windows:' -n "$(basename "${0}")" -- "$@")
+# shellcheck disable=SC2181
+if [[ $? -ne 0 ]]; then
+	show_help
+	exit 1
+fi
+
+eval set -- "${temp}"
+unset temp
+while true; do
+	case "$1" in
+
+		-h | --help)
+			show_help
+			exit 0
+			;;
+
+		-w | --windows)
+			shift
+			flag_cross=true
+			;;
+
+		--qt-ver)
+			qt_ver="${2}"
+			shift 2
+			continue
+			;;
+
+		'--')
+			shift
+			break
+			;;
+
+		*)
+			WriteLog "Internal error on argument (${1}) !" >&2
+			exit 1
+			;;
+	esac
+done
 
 # List of WinGet packages to install.
 declare -A wg_pkgs
@@ -216,11 +202,83 @@ lnx_pkgs+=(wayland-protocols)
 lnx_pkgs+=(zlib1g-dev)
 lnx_pkgs+=(libsm-dev)
 
-
-if [[ "$#" -eq 0 ]]; then
-	show_help
-	exit 0
+# Set some defaults depending on the current OS.
+if [[ "${os_name}" == "Cygwin" ]]; then
+	os_code="w64"
+	repo_dir="qt-win"
+	git_cmd='/cygdrive/c/Program Files/Git/cmd/git.exe'
+else
+	if ${flag_cross}; then
+		os_code="win"
+	else
+		os_code="lnx"
+	fi
+	repo_dir="qt-lnx"
+	git_cmd='git'
 fi
+
+# Directory to eventually ZIP.
+lib_dir="${lib_base_dir}/${os_code}-$(uname -m)"
+# Build directory.
+build_dir="${run_dir}/build-${os_code}-$(uname -m)"
+# Install directory for cmake.
+if [[ "${os_name}" == "Cygwin" ]]; then
+	install_dir="${lib_dir}/${qt_ver}/mingw_64"
+	build_dir="/cygdrive/p/tmp/build-${os_code}-$(uname -m)"
+	repo_dir="${TEMP}/${repo_dir}"
+else
+	if ${flag_cross}; then
+		install_dir="${lib_dir}/${qt_ver}/mingw_64"
+	else
+		install_dir="${lib_dir}/${qt_ver}/gcc_64"
+	fi
+fi
+# Form the zip-filepath using the found or set Qt version.
+zip_file_base="${run_dir}/qt-${os_code}-$(uname -m)-${qt_ver}"
+zip_file="${zip_file_base}.zip"
+
+# Detect windows using the cygwin 'uname' command.
+if [[ "${os_name}" == "Cygwin" ]]; then
+	# Tools directory for this machine.
+	dir_file="${run_dir}/.tools-dir-$(uname -n)"
+	# Check if the directory file exists.
+	if [[ -f "${dir_file}" ]]; then
+		# Read the first line of the file and strip the newline.
+		tools_dir="$(head -n 1 "${dir_file}" | tr -d '\n' | tr -d '\n' | tr -d '\r')"
+		if [[ -d "${tools_dir}" ]]; then
+			export PATH="${tools_dir}:${PATH}"
+			WriteLog "# Tools directory added to PATH: ${tools_dir}"
+		else
+			WriteLog "# Non-existing tools directory: ${tools_dir}"
+		fi
+	else
+		WriteLog "# No tools directory specified!"
+	fi
+elif [[ "${os_name}" == "GNU/Linux" ]]; then
+	WriteLog "# Linux $(uname -m) detected"
+else
+	WriteLog "Targeted OS '${os_name}' not supported!"
+fi
+
+function report {
+	echo "
+Operating System  : ${os_name} (${os_code})
+Qt Repository     : ${qt_repo} (v${qt_ver})
+Run directory     : ${run_dir}
+Build Directory   : ${build_dir}
+Library Directory : ${lib_dir}
+Install Directory : ${install_dir}
+Zip file          : ${zip_file}
+Git Command       : ${git_cmd}"
+	if [[ "${os_name}" == "Cygwin" ]]; then
+		echo "
+Windows Tools File: ${dir_file}
+Windows Tools Dir : ${tools_dir}
+Compiler Version  : $("${tools_dir}/gcc" --version | head -n 1 | tr -d '\n' | tr -d '\r')
+"
+	fi
+	echo ""
+}
 
 # Command available from outside Docker.
 case $1 in
@@ -280,7 +338,13 @@ case $1 in
 	local)
 		WriteLog "Creating symlink to tmp directory for repository directory for speed."
 		# Create a symlink for the repository in the temp directory to speed up
-		mkdir -p "/tmp/${repo_dir}" && ln -s "/tmp/${repo_dir}" "${repo_dir}"
+		mkdir -p "/tmp/${repo_dir}"
+		# Only create the symlink when it does not exist.
+		if [[ ! -L "${repo_dir}" ]]; then
+			ln -s "/tmp/${repo_dir}/" "${repo_dir}"
+		else
+			echo "Symlink '${repo_dir}' exists."
+		fi
 		;;
 
 	clone)
@@ -316,11 +380,11 @@ case $1 in
 			# When in Windows the access control list needs to be fixed so batch files can be
 			# called from cmake.exe when cloned using Cygwin git.
 			[[ "${os_name}" == "Cygwin" ]] && read -rp "Granting 'Users' group full-access to cloned repository [y/N]?" &&
-			if [[ $REPLY = [yY] ]]; then
-				WriteLog "Granting 'Users' group full-access to '${repo_dir}'."
-				# Reset the access control list changes made while cloning by Git form cygwin.
-				icacls . /reset /T /C
-			fi
+				if [[ $REPLY = [yY] ]]; then
+					WriteLog "Granting 'Users' group full-access to '${repo_dir}'."
+					# Reset the access control list changes made while cloning by Git form cygwin.
+					icacls . /reset /T /C
+				fi
 		else
 			./init-repository --force --branch
 		fi
@@ -344,7 +408,7 @@ case $1 in
 		fi
 		conf_cmd+=(-help)
 		# Execute the configuration command.
-		"${conf_cmd[@]}"
+		"${conf_cmd[@]}" | less
 		popd >/dev/null
 		;;
 
@@ -357,7 +421,7 @@ case $1 in
 		fi
 		conf_cmd+=(-list-features)
 		# Execute the configuration command.
-		"${conf_cmd[@]}" 2>&1
+		"${conf_cmd[@]}" 2>&1 | less
 		WriteLog "
 Enable/Disable feature using options:
   -feature-<feature>
@@ -385,6 +449,33 @@ Enable/Disable feature using options:
 		report
 		mkdir -p "${build_dir}"
 		pushd "${build_dir}" >/dev/null
+		# Create the toolchain file only when cross compiling.
+		if ${flag_cross}; then
+			cat <<'EOD' >"${build_dir}/toolchain.cmake"
+# File: mingw-toolchain-x86_64.cmake
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR x86_64)
+
+# Adjust the to match your distro (e.g. x86_64-w64-mingw32)
+set(MINGW_PREFIX "/usr/bin/x86_64-w64-mingw32-")
+set(MINGW_SUFFIX "-posix")
+
+# Compilers
+set(CMAKE_C_COMPILER   ${MINGW_PREFIX}gcc${MINGW_SUFFIX})
+set(CMAKE_CXX_COMPILER ${MINGW_PREFIX}g++${MINGW_SUFFIX})
+set(CMAKE_RC_COMPILER  ${MINGW_PREFIX}windres)
+set(CMAKE_AR           ${MINGW_PREFIX}ar)
+set(CMAKE_RANLIB       ${MINGW_PREFIX}ranlib)
+set(CMAKE_STRIP        ${MINGW_PREFIX}strip)
+
+# Avoid mixing host paths when searching for libraries/headers
+set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)   # find host programs on host
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)    # find target libs in target root
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)    # find target headers in target root
+EOD
+		fi
+
 		if [[ "${os_name}" == "Cygwin" ]]; then
 			conf_cmd=(cmd /c "$(cygpath -w "${repo_dir}/configure.bat")")
 			#conf_cmd=("../${repo_dir}/configure.bat")
@@ -393,12 +484,14 @@ Enable/Disable feature using options:
 			conf_cmd=("${run_dir}/${repo_dir}/configure")
 			conf_cmd+=(-ccache)
 			conf_cmd+=(-feature-ccache)
-			conf_cmd+=(-qpa xcb)
 			conf_cmd+=(-prefix "${install_dir}")
-			conf_cmd+=(-platform linux-g++)
-			conf_cmd+=(-no-feature-wayland-compositor-quick)
-			# Next option need some additional packages installed.
-			#conf_cmd+=(-qpa wayland)
+			if ! ${flag_cross}; then
+				conf_cmd+=(-qpa xcb)
+				conf_cmd+=(-platform linux-g++)
+				conf_cmd+=(-no-feature-wayland-compositor-quick)
+				# Next option need some additional packages installed.
+				#conf_cmd+=(-qpa wayland)
+			fi
 		fi
 		conf_cmd+=(-release)
 		conf_cmd+=(-opensource)
@@ -431,10 +524,21 @@ Enable/Disable feature using options:
 		conf_cmd+=(-skip qtmqtt)
 		conf_cmd+=(-skip qtopcua)
 		conf_cmd+=(-skip qtvirtualkeyboard)
+		if ${flag_cross}; then
+			conf_cmd+=(-skip qtactiveqt)
+		fi
 		conf_cmd+=(-no-feature-spatialaudio_quick3d)
 		conf_cmd+=(-no-feature-qdoc)
 		conf_cmd+=(-no-feature-clang)
 		#conf_cmd+=(-qt3d-assimp)
+		# Execute the configuration command.
+
+		#conf_cmd+=(-qt3d-assimp)
+		if ${flag_cross}; then
+			conf_cmd+=("--")
+			conf_cmd+=(-DCMAKE_TOOLCHAIN_FILE="${build_dir}/toolchain.cmake")
+			conf_cmd+=(-DQT_HOST_PATH="/mnt/project/lnx-x86_64/6.9.1/gcc_64")
+		fi
 		# Execute the configuration command.
 		"${conf_cmd[@]}"
 		popd >/dev/null
@@ -463,7 +567,7 @@ Enable/Disable feature using options:
 	targets)
 		report
 		pushd "${build_dir}" >/dev/null
-		cmake --build . --target help
+		cmake --build . --target help | less
 		popd >/dev/null
 		;;
 

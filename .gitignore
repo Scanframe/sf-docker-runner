@@ -5,6 +5,7 @@
 .idea
 .nexus-credentials
 .minio-credentials
+.install-dir-*
 .qt-lib-dir
 .win-app-dir
 gitlab-runner/config/config.toml
