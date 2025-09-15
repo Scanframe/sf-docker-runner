@@ -1,7 +1,33 @@
 #!/usr/bin/env bash
 
+set -e
 # Get the script directory.
 script_dir="$(cd "$(dirname "${0}")" && pwd)"
+
+function ScriptExit {
+	local exitcode="${?}" idx line file func
+	# Show the stack in case of an error.
+	if [[ "${exitcode}" -ne 0 ]]; then
+		# Create
+		echo -e "\n--- Call Stack ---"
+		# Perform a stack trace.
+		idx=0
+		while read -r line func file < <(caller $idx); do
+			# When the line number is 1 clear the line number and use the passed failed command.
+			[[ "${line}" -eq 1 ]] && line=""
+			echo "[$idx] $file:$line $func(): $([[ -n "${line}" ]] && sed -n "${line}"p "$file" || echo "$3")"
+			((idx += 1))
+		done
+		echo "! Exitcode: ${exitcode}"
+	fi
+	# Report execution time.
+	#echo "- $(basename "${0}"), executed in ${SECONDS}s."
+	# Propagate the exit code.
+	exit "${exitcode}"
+}
+
+## Trap script exit with function.
+trap 'ScriptExit "${BASH_SOURCE}" "${BASH_LINENO}" "${BASH_COMMAND}"' EXIT
 
 # Prints the help.
 #
@@ -13,24 +39,38 @@ function show_help {
   Configures and runs a LLM using Docker Model Runner (DMR).
 
   Options:
-    -h, --help    : Show this help.
+    -h, --help : Show this help.
 
   Commands:
     deps   : Install dependencies.
     update : Updates the model runner.
-    pull   : Pulls the AI model but also starts the model runner container.
+    pull   : Pulls the configured AI models but also starts the model runner container.
     run    : Runs the Docker model interactively on the command line.
     list   : List the AI models currently available to the model runner.
-    test   : Tests the API using curl.
+    test   : Tests the API using curl and the first AI model.
     start  : Starts running the docker model runner container in the background.
     stop   : Stops the docker model runner in the background.
-"
+
+  Model list:"
+	for ai_model in "${ai_models[@]}"; do
+		echo "    * ${ai_model}"
+	done
+
 }
+
+# Container name running the models. (Fixed by Docker plugin?)
+dmr_container="docker-model-runner"
+# The AI model used.
+ai_models=("ai/smollm2:360M-Q4_K_M")
+ai_models+=("ai/qwen3-coder:30B-A3B-UD-Q4_K_XL")
+# Required packages.
+declare -A packages
+packages["Docker Model Plugin"]="docker-model-plugin"
 
 # When no arguments or options are given show the help.
 if [[ $# -eq 0 ]]; then
 	show_help
-	exit 1
+	exit 0
 fi
 
 # Change to the current script directory.
@@ -73,14 +113,6 @@ if [[ $# -gt 0 ]]; then
 	shift
 fi
 
-# Container name running the models. (Fixed by Docker plugin?)
-dmr_container="docker-model-runner"
-# The AI model used.
-ai_model="ai/qwen3-coder:30B-A3B-UD-Q4_K_XL"
-# Required packages.
-declare -A packages
-packages["Docker Model Plugin"]="docker-model-plugin"
-
 # Process subcommand.
 case "${cmd}" in
 	deps)
@@ -88,14 +120,14 @@ case "${cmd}" in
 		if apt-cache policy docker-ce | grep -A 1 "^ \*\*\*.*" | tail -n 1 | grep -q '://download.docker.com/linux/'; then
 			# Install all required and dependent packages.
 			for name in "${!packages[@]}"; do
-			if dpkg-query -W -f='${Status}' "${packages["${name}"]}" 2>/dev/null | grep -q "ok installed"; then
-				echo "Package '$name' (${packages["${name}"]}) is installed."
-			else
-				echo "Elevating to install package: ${packages["${name}"]}"
-				if sudo apt-get install "${packages["${name}"]}"; then
-					exit 1
+				if dpkg-query -W -f='${Status}' "${packages["${name}"]}" 2>/dev/null | grep -q "ok installed"; then
+					echo "Package '$name' (${packages["${name}"]}) is installed."
+				else
+					echo "Elevating to install package: ${packages["${name}"]}"
+					if sudo apt-get install "${packages["${name}"]}"; then
+						exit 1
+					fi
 				fi
-			fi
 			done
 			docker model version
 		else
@@ -108,12 +140,14 @@ case "${cmd}" in
 		;;
 
 	pull)
-		echo "Pulling the model: ${ai_model}"
-		docker model pull "${ai_model}"
+		echo "Pulling the models:" "${ai_models[@]}"
+		for ai_model in "${ai_models[@]}"; do
+			docker model pull "${ai_model}"
+		done
 		;;
 
 	run)
-		docker model run "${ai_model}"
+		docker model run "${ai_models[0]}"
 		;;
 
 	start)
@@ -136,10 +170,10 @@ case "${cmd}" in
 		;;
 
 	test)
-		curl http://localhost:12434/engines/llama.cpp/v1/chat/completions \
--H "Content-Type: application/json" \
--d "{
-	\"model\": \"${ai_model}\",
+		query_string="$(curl -ss --fail-with-body "http://localhost:12434/engines/llama.cpp/v1/chat/completions" \
+			-H "Content-Type: application/json" -d \
+			"{
+	\"model\": \"${ai_models[0]}\",
 	\"messages\": [
 		{\"role\":\"system\",\"content\":\"You are a helpful coding assistant.\"},
 		{\"role\":\"user\",\"content\":\"Create a simple CLI hello world app in Python?\"}
@@ -149,7 +183,8 @@ case "${cmd}" in
 	\"top_k\": 20,
 	\"repetition_penalty\":1.05,
 	\"max_tokens\":512
-}"
+}")"
+		echo -e "$(echo "${query_string}" | jq .choices[0].message.content)"
 		;;
 
 	*)
