@@ -42,14 +42,17 @@ function show_help {
     -h, --help : Show this help.
 
   Commands:
-    deps   : Install dependencies.
-    update : Updates the model runner.
-    pull   : Pulls the configured AI models but also starts the model runner container.
-    run    : Runs the Docker model interactively on the command line.
-    list   : List the AI models currently available to the model runner.
-    test   : Tests the API using curl and the first AI model.
-    start  : Starts running the docker model runner container in the background.
-    stop   : Stops the docker model runner in the background.
+    deps        : Install dependencies.
+    update      : Updates the model runner.
+    pull        : Pulls the configured AI models but also starts the model runner container.
+    run         : Runs the Docker model interactively on the command line.
+    list        : List the AI models currently available to the model runner.
+    test        : Tests the API using curl and the first AI model.
+    start       : Starts running the docker model runner container in the background.
+    stop        : Stops the docker model runner in the background.
+    status      : Reports the status on the container.
+    restart-no  : Set the container to start at host-system boot. (This is the default)
+    restart-yes : Set the container to not start at host-system boot.
 
   Model list:"
 	for ai_model in "${ai_models[@]}"; do
@@ -60,7 +63,7 @@ function show_help {
 
 # Container name running the models. (Fixed by Docker plugin?)
 dmr_container="docker-model-runner"
-# The AI model used.
+# The AI models used.
 ai_models=("ai/smollm2:360M-Q4_K_M")
 ai_models+=("ai/qwen3-coder:30B-A3B-UD-Q4_K_XL")
 # Required packages.
@@ -156,6 +159,26 @@ case "${cmd}" in
 
 	list)
 		docker model list
+		;;
+
+	status)
+		#docker inspect -f '{{.Name}} - {{.HostConfig.RestartPolicy.Name}}'
+		docker inspect -f 'Name: {{.Name}}
+Image: {{.Config.Image}}
+Status: {{.State.Status}}
+Restart: {{.HostConfig.RestartPolicy.Name}}
+Uptime: {{.State.StartedAt}}
+MemoryLimit: {{.HostConfig.Memory}}
+CPUs: {{.HostConfig.NanoCpus}}
+IP: {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${dmr_container}"
+		;;
+
+	restart-no)
+		docker update --restart=no "${dmr_container}"
+		;;
+
+	restart-yes)
+		docker update --restart=always "${dmr_container}"
 		;;
 
 	stop)
