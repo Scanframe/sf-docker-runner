@@ -5,6 +5,9 @@ set -e
 
 # Get the script directory.
 script_dir="$(cd "$(dirname "${0}")" && pwd)"
+# Include WriteLog function.
+source "${script_dir}/inc/Miscellaneous.sh"
+
 # Set the base image tag of the FROM statement used.
 base_img_tag="24.04"
 # Set the base image name of the FROM statement used.
@@ -231,6 +234,9 @@ else
 	img_tag="${base_img_tag}"
 fi
 
+# Form the Windows 64 toolchain name.
+toolchain="w64-x86_64-mingw-1320-posix"
+
 # Get the subcommand.
 cmd=""
 if [[ $# -gt 0 ]]; then
@@ -251,6 +257,7 @@ if [[ -n "${cmd}" ]]; then
 	Temporary directory  : ${temp_dir}
 	Qt library directory : ${qt_lib_dir}
 	Nexus relative path  : ${raw_lib_offset}
+	Windows toolchain    : ${toolchain}
 	"
 	${flag_pause} && read -rp "Continue with command '${cmd}' [y/N]?" && if [[ $REPLY != [yY] ]]; then
 		exit 0
@@ -279,7 +286,6 @@ case "${cmd}" in
 		dckr_cmd=(docker)
 		dckr_cmd+=(image)
 		dckr_cmd+=(push)
-		#dckr_cmd+=(--platform "linux/${platform}")
 		dckr_cmd+=("${NEXUS_REPOSITORY}/${base_img_name}:${base_img_tag}")
 		"${dckr_cmd[@]}"
 		;;
@@ -377,36 +383,35 @@ case "${cmd}" in
 
 	qt-w64-tools)
 		# Check if the Qt version library directory exists for Windows.
-		qt_tools_dir="${qt_lib_dir}/../w64-${architecture}-tools"
-		if [[ ! -d "${qt_tools_dir}" ]]; then
-			WriteLog "Qt Tools directory '${qt_tools_dir}' does not exist!"
+		qt_tools_dir="${qt_lib_dir}/../toolchain"
+		if [[ ! -d "${qt_tools_dir}/${toolchain}" ]]; then
+			WriteLog "Qt Tools directory '${qt_tools_dir}/${toolchain}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/w64-${architecture}-tools.zip"
+		zip_file="${temp_dir}/${toolchain}.zip"
 		# Remove the current zip file.
 		[[ -f "${zip_file}" ]] && rm "${zip_file}"
 		# Change directory in order for zip to store the correct path.
 		pushd "${qt_tools_dir}"
 		# Fix the permissions on exe and dll and other files for Cygwin to make them executable.
 		find . \( -iname "*.dll" -o -iname "*.exe" -o -iname "*.cmd" -o -iname "*.bat" \) -exec chmod +x {} \;
-		WriteLog "Zip all Windows MinGW compiler versions of architecture '${architecture}'."
+		WriteLog "Zip Windows MinGW compiler '${toolchain}'."
 		# Zip all GNU compiler versions.
-		zip --quiet --display-bytes --recurse-paths --symlinks "${zip_file}" mingw*_64
+		zip --quiet --display-bytes --recurse-paths --symlinks "${zip_file}" "${toolchain}"
 		popd
 		ls -lah "${zip_file}"
 		;;
 
 	qt-w64-tools-up)
 		# Form the zip-filepath using the found or set Qt version.
-		# TODO: Put the GNU version in the files name.
-		zip_file="${temp_dir}/w64-${architecture}-tools.zip"
+		zip_file="${temp_dir}/${toolchain}.zip"
 		# Upload file Windows Qt library.
 		curl \
 			--progress-bar \
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			--upload-file "${zip_file}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/qt/"
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/toolchain/"
 		;;
 
 	push)

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Exit immediately if a command exits with a non-zero status. (is the same as '-o errexit')
 set -e
@@ -8,6 +8,10 @@ set -o pipefail
 # Get the scripts run directory weather it is a symlink or not.
 run_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 run_dir="$(realpath "${run_dir}")"
+
+# Include WriteLog function.
+source "${run_dir}/inc/Miscellaneous.sh"
+
 # Move to it.
 cd "${run_dir}"
 
@@ -16,33 +20,28 @@ os_name="$(uname -o)"
 # Qt repository URL.
 qt_repo="https://code.qt.io/qt/qt5.git"
 
-function WriteLog {
-	echo "$@" 1>&2
-}
-
 # Install base directory for this machine.
 dir_file="${run_dir}/.install-dir-$(uname -n)"
 # Check if the directory file exists.
 if [[ -f "${dir_file}" ]]; then
 	# Read the first line of the file and strip the newline.
 	lib_base_dir="$(head -n 1 "${dir_file}" | tr -d '\n' | tr -d '\n' | tr -d '\r')"
-	WriteLog "# Library base directory set to: ${lib_base_dir}"
+	WriteLog "- Library install base directory set to: ${lib_base_dir}"
 else
 	lib_base_dir="$(realpath "${run_dir}/..")"
 fi
 
 # Initial Qt version to compile.
-qt_ver="6.9.1"
+qt_ver="0.0.0"
 
 # Initialize the cross-compile flag.
 flag_cross=false
 
 function show_help {
 	echo "Used to build the Qt framework libraries from source."
-	report
 	echo "Available options:
   -w, --windows : Crosscompile for Windows flag (all commands)
-  --qt-ver      : Qt version to compile (only for clone command).
+  --qt-ver      : Qt version to build.
 "
 	echo "Available commands:
   help      : Shows this help.
@@ -56,7 +55,8 @@ function show_help {
   local     : Creates a symlink to local tmp directory to clone the source into for faster compiling.
   clone     : Clone the Qt repository from '${qt_repo}' at branch 'v${qt_ver}'.
   update    : Update the existing repository.
-  init      : Initialize the Git repositories.
+  init      : Initialize the Git repositories without the large qtwebengine-chromium repository.
+  init-norm : Initialize the Git repositories with the default set of modules.
   conf-help : Show configure help.
   feat-help : Show all possible features.
   conf-help : Show available configuration options.
@@ -70,14 +70,15 @@ function show_help {
   build     : Calls the cmake build to compile the libraries/framework
   install   : Install the build in the reported library directory.
   zip       : Creates a zip-file from the library directory for upload to Nexus for download in Docker images.
+  clean     : Removes the build directory.
 
 Steps to build Qt v${qt_ver} in order are:
-  deps, clone, init, conf, build, install ,zip
+  deps, local, clone, init, conf, fix, build, install ,zip
 "
 }
 
 # Parse options.
-temp=$(getopt -o 'hw' --long 'help,windows:' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hw' --long 'help,qt-ver:,windows:' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	show_help
@@ -225,7 +226,11 @@ build_dir="${run_dir}/build-${os_code}-$(uname -m)"
 if [[ "${os_name}" == "Cygwin" ]]; then
 	install_dir="${lib_dir}/${qt_ver}/mingw_64"
 	build_dir="/cygdrive/p/tmp/build-${os_code}-$(uname -m)"
-	repo_dir="${TEMP}/${repo_dir}"
+	if [[ -n "${TEMP}" ]]; then
+		repo_dir="${TEMP}/${repo_dir}"
+	else
+		WriteLog "Cygwin is missing 'TEMP' environment variable!"
+	fi
 else
 	if ${flag_cross}; then
 		install_dir="${lib_dir}/${qt_ver}/mingw_64"
@@ -247,12 +252,12 @@ if [[ "${os_name}" == "Cygwin" ]]; then
 		tools_dir="$(head -n 1 "${dir_file}" | tr -d '\n' | tr -d '\n' | tr -d '\r')"
 		if [[ -d "${tools_dir}" ]]; then
 			export PATH="${tools_dir}:${PATH}"
-			WriteLog "# Tools directory added to PATH: ${tools_dir}"
+			WriteLog "- Tools directory added to PATH: ${tools_dir}"
 		else
-			WriteLog "# Non-existing tools directory: ${tools_dir}"
+			WriteLog "- Non-existing tools directory: ${tools_dir}"
 		fi
 	else
-		WriteLog "# No tools directory specified!"
+		WriteLog "! No tools directory specified using file: ${dir_file}"
 	fi
 elif [[ "${os_name}" == "GNU/Linux" ]]; then
 	WriteLog "# Linux $(uname -m) detected"
@@ -261,23 +266,22 @@ else
 fi
 
 function report {
-	echo "
-Operating System  : ${os_name} (${os_code})
-Qt Repository     : ${qt_repo} (v${qt_ver})
-Run directory     : ${run_dir}
-Build Directory   : ${build_dir}
-Library Directory : ${lib_dir}
-Install Directory : ${install_dir}
-Zip file          : ${zip_file}
-Git Command       : ${git_cmd}"
+	WriteLog "
+# Operating System  : ${os_name} (${os_code})
+# Qt Repository     : ${qt_repo} (v${qt_ver})
+# Run directory     : ${run_dir}
+# Build Directory   : ${build_dir}
+# Library Directory : ${lib_dir}
+# Install Directory : ${install_dir}
+# Zip file          : ${zip_file}
+# Git Command       : ${git_cmd}"
 	if [[ "${os_name}" == "Cygwin" ]]; then
-		echo "
-Windows Tools File: ${dir_file}
-Windows Tools Dir : ${tools_dir}
-Compiler Version  : $("${tools_dir}/gcc" --version | head -n 1 | tr -d '\n' | tr -d '\r')
+		WriteLog "
+# Windows Tools File: ${dir_file}
+# Windows Tools Dir : ${tools_dir}
+# Compiler Version  : $(test -f "${tools_dir}/gcc" && "${tools_dir}/gcc" --version | head -n 1 | tr -d '\n' | tr -d '\r')
 "
 	fi
-	echo ""
 }
 
 # Command available from outside Docker.
@@ -288,13 +292,13 @@ case $1 in
 		;;
 
 	run | start | stop | attach)
-		# Run Docker image without a Qt version configured.
+		# Run Docker C++ builder image without a Qt version configured.
 		"${run_dir}/cpp-builder.sh" --qt-ver '' --project "${run_dir}/../../../applications/library/qt" "$@"
 		exit 0
 		;;
 
 	tags)
-		git ls-remote --tags "${qt_repo}" | grep --invert-match '\^{}$' | pcregrep -o1 '^[^ ]+\s+refs/tags/([^\s]+)$'
+		git ls-remote --tags "${qt_repo}" | grep --invert-match '\^{}$' | pcregrep -o1 '^[^ ]+\s+refs/tags/([^\s]+)$' | sort --version-sort
 		exit 0
 		;;
 
@@ -320,13 +324,14 @@ case $1 in
 
 	deps)
 		report
+		WriteLog "- Install dependent packages..."
 		if [[ "${os_name}" == "Cygwin" ]]; then
 			# Iterate through the associative array of subdirectories (key) and remotes (value).
 			for name in "${!wg_pkgs[@]}"; do
 				if winget list --disable-interactivity --accept-source-agreements --exact --id "${wg_pkgs["${name}"]}" >/dev/null; then
-					echo "WinGet Package '${name}' already installed."
+					WriteLog "- WinGet Package '${name}' already installed."
 				else
-					echo "Installing WinGet package'${name}' ..."
+					WriteLog "Installing WinGet package'${name}' ..."
 					winget install --disable-interactivity --accept-source-agreements --exact --id "${wg_pkgs["${name}"]}"
 				fi
 			done
@@ -336,33 +341,35 @@ case $1 in
 		;;
 
 	local)
-		WriteLog "Creating symlink to tmp directory for repository directory for speed."
+		WriteLog "- Creating symlink to tmp directory for repository directory for speed."
 		# Create a symlink for the repository in the temp directory to speed up
 		mkdir -p "/tmp/${repo_dir}"
 		# Only create the symlink when it does not exist.
 		if [[ ! -L "${repo_dir}" ]]; then
 			ln -s "/tmp/${repo_dir}/" "${repo_dir}"
 		else
-			echo "Symlink '${repo_dir}' exists."
+			WriteLog "- Symlink '${repo_dir}' exists."
 		fi
 		;;
 
 	clone)
 		report
+		WriteLog "- Cloning repository from tag 'v${qt_ver}'".
 		# Check if the directory is empty by checking the existence of the README.md file.
 		if [[ -f "${repo_dir}/README.md" ]]; then
 			WriteLog "Already cloned: v${qt_ver} ${qt_repo} ${repo_dir}"
 		else
 			if [[ "${os_name}" == "Cygwin" ]]; then
-				"${git_cmd}" clone --branch v${qt_ver} "${qt_repo}" "$(cygpath -w "${repo_dir}")/"
+				"${git_cmd}" clone --branch "v${qt_ver}" "${qt_repo}" "$(cygpath -w "${repo_dir}")/"
 			else
-				"${git_cmd}" clone --branch v${qt_ver} "${qt_repo}" "${repo_dir}/"
+				"${git_cmd}" clone --branch "v${qt_ver}" "${qt_repo}" "${repo_dir}/"
 			fi
 		fi
 		;;
 
 	update)
 		report
+		WriteLog "- Update repository and submodules..."
 		# Update recursively.
 		if [[ "${os_name}" == "Cygwin" ]]; then
 			"${git_cmd}" -C "$(cygpath -w "${repo_dir}")" submodule update --init --recursive
@@ -371,12 +378,17 @@ case $1 in
 		fi
 		;;
 
-	init)
+	init | init-norm)
 		report
+		WriteLog "- Initialize submodules..."
 		pushd "${repo_dir}" >/dev/null
 		if [[ "${os_name}" == "Cygwin" ]]; then
 			WriteLog "Initializing repository sub modules..."
-			cmd /c "$(cygpath -w "${PWD}/init-repository.bat")" --force --branch # --module-subset=essential
+			if [[ "${1}" == "init" ]]; then
+				cmd /c "$(cygpath -w "${PWD}/init-repository.bat")" --force --branch --module-subset=default,-qtwebchannel,-qtwebengine,-qtwebglplugin,-qtwebview
+			else
+				cmd /c "$(cygpath -w "${PWD}/init-repository.bat")" --force --branch --module-subset=default
+			fi
 			# When in Windows the access control list needs to be fixed so batch files can be
 			# called from cmake.exe when cloned using Cygwin git.
 			[[ "${os_name}" == "Cygwin" ]] && read -rp "Granting 'Users' group full-access to cloned repository [y/N]?" &&
@@ -386,16 +398,30 @@ case $1 in
 					icacls . /reset /T /C
 				fi
 		else
-			./init-repository --force --branch
+			if [[ "${1}" == "init" ]]; then
+				# Omit module qtwebengine when 'https://code.qt.io/qt/qtwebengine-chromium.git' since giving a 503 error.
+				# Some additional modules need to be omitted due to failing configuration and this seems to fix that.
+				./init-repository --force --branch --module-subset=default,-qtwebchannel,-qtwebengine,-qtwebglplugin,-qtwebview
+			else
+				./init-repository --force --branch --module-subset=default
+			fi
 		fi
 		popd >/dev/null
 		;;
 
 	clean)
 		report
+		WriteLog "- Cleaning build and/or repo directory..."
 		if [[ -d "${build_dir}" ]]; then
 			WriteLog "Removing build directory '${build_dir}'."
-			rm --recursive --preserve-root "${build_dir}"
+			if AskConfirmation "Start removing?"; then
+				rm --recursive --preserve-root "${build_dir}"
+			fi
+		fi
+		WriteLog "Removing sources from directory '${repo_dir}'."
+		if AskConfirmation "Start removing?"; then
+			# shellcheck disable=SC2115
+			rm --recursive --preserve-root --force "${repo_dir}/"
 		fi
 		;;
 
@@ -504,7 +530,7 @@ EOD
 		conf_cmd+=(-skip qtcharts)
 		conf_cmd+=(-skip qtdoc)
 		conf_cmd+=(-skip qtgraphs)
-		conf_cmd+=(-skip qtmultimedia)
+		#conf_cmd+=(-skip qtmultimedia)
 		conf_cmd+=(-skip qtquick)
 		conf_cmd+=(-skip qtquick3d)
 		conf_cmd+=(-skip qtquick3dphysics)
@@ -512,13 +538,13 @@ EOD
 		conf_cmd+=(-skip qtquickcontrols2)
 		conf_cmd+=(-skip qtquickeffectmaker)
 		conf_cmd+=(-skip qtquicktimeline)
-		conf_cmd+=(-skip qtshadertools)
+		#conf_cmd+=(-skip qtshadertools)
 		conf_cmd+=(-skip qttranslations)
 		conf_cmd+=(-skip qtwebchannel)
 		conf_cmd+=(-skip qtwebengine)
 		conf_cmd+=(-skip qtwebview)
 		conf_cmd+=(-skip qtdeclarative)
-		conf_cmd+=(-skip qtspeech)
+		#conf_cmd+=(-skip qtspeech)
 		conf_cmd+=(-skip qtlocation)
 		conf_cmd+=(-skip qtlottie)
 		conf_cmd+=(-skip qtmqtt)
@@ -537,7 +563,7 @@ EOD
 		if ${flag_cross}; then
 			conf_cmd+=("--")
 			conf_cmd+=(-DCMAKE_TOOLCHAIN_FILE="${build_dir}/toolchain.cmake")
-			conf_cmd+=(-DQT_HOST_PATH="/mnt/project/lnx-x86_64/6.9.1/gcc_64")
+			conf_cmd+=(-DQT_HOST_PATH="/mnt/project/lnx-x86_64/${qt_ver}/gcc_64")
 		fi
 		# Execute the configuration command.
 		"${conf_cmd[@]}"
@@ -580,7 +606,7 @@ EOD
 
 	install)
 		if [[ -d "${lib_dir}/${qt_ver}" ]]; then
-			echo "Renaming version directory '${lib_dir}/${qt_ver}' first."
+			WriteLog "- Renaming version directory '${lib_dir}/${qt_ver}' first."
 			mv "${lib_dir}/${qt_ver}" "${lib_dir}/${qt_ver}_$(date +'%FT%T')"
 		fi
 		pushd "${build_dir}" >/dev/null
@@ -596,12 +622,12 @@ EOD
 		report
 		# Check if the Qt version library directory exists.
 		if [[ ! -d "${install_dir}" ]]; then
-			echo "Qt version directory '${install_dir}' does not exist!"
+			WriteLog "- Qt version directory '${install_dir}' does not exist!"
 			exit 1
 		fi
 		# Rename the existing zip file using a time stamp.
 		if [[ -f "${zip_file}" ]]; then
-			echo "Renaming existing zip-file '${zip_file}' first."
+			WriteLog "Renaming existing zip-file '${zip_file}' first."
 			mv "${zip_file}" "${zip_file_base}_$(date +'%FT%T').zip"
 		fi
 		# Remove the current zip file.
@@ -609,7 +635,7 @@ EOD
 		# Change directory in order for zip to store the correct path.
 		pushd "${lib_dir}" >/dev/null
 		# Zip only the the compiled version directory.
-		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}/gcc_64/"{bin,lib,include,libexec,mkspecs,plugins} ${qt_ver}
+		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}/gcc_64/"{bin,lib,include,libexec,mkspecs,plugins} "${qt_ver}"
 		ls -lah "${zip_file}"
 		popd >/dev/null
 		;;
@@ -621,7 +647,7 @@ EOD
 
 	*)
 		if [[ -n "$1" ]]; then
-			echo "Invalid command '$1'."
+			WriteLog "Invalid command '$1' !"
 		else
 			show_help
 			exit 1

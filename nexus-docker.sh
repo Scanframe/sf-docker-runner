@@ -160,7 +160,8 @@ case "${cmd}" in
 		;;
 
 	local)
-		docker image ls --all
+		#docker image ls --all
+		docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}"
 		;;
 
 	list)
@@ -168,8 +169,8 @@ case "${cmd}" in
 			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
 			-X 'GET' \
 			"${NEXUS_SERVER_URL}/service/rest/v1/components?repository=${NEXUS_REPO_NAME}" |
-			jq -r '.items[]|(.repository + " " + .name + " " + .version + " " + .id)' |
-			column --table --separator " " --table-columns "Repository,Name,Version,Id" --output-separator " | "
+			jq -r '.items[]|(.name + "|" + .version + "|" + .id + "|" + (.assets[0].fileSize / 1000.0 | tostring) + " GB" + "|" + (.assets[0].lastModified[:19] | gsub("T"; " ")))' |
+			column --table --separator "|" --table-columns "Image/Name,Tag/Version,Id,Size,Modified At" --output-separator "  "
 		;;
 
 	login)
