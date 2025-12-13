@@ -29,7 +29,8 @@
 	command -v jq >/dev/null && echo -e "JQ:$(jq --version | cut -d'-' -f2)"
 	command -v gcovr >/dev/null && echo -e "Gcovr:$(gcovr --version | head -n 1 | grep -o '[^ ]*$')"
 	command -v python3 >/dev/null && echo -e "Python3:$(python3 --version | cut -d' ' -f2)"
-	if command -v wine >/dev/null; then
+	# Wine only for x86_64 platforms.
+	if  [[ "$(uname -m)" == "x86_64" ]] && command -v wine >/dev/null; then
 		echo -e "Wine:$(wine --version | sed 's/^wine-\(\S*\).*$/\1/')"
 		winver="$(DISPLAY='' wine cmd /c ver 2>/dev/null)"
 		echo "Wine > Windows:$(echo "${winver:4}" | cut -d' ' -f3)"

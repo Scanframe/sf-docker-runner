@@ -34,13 +34,13 @@ raw_lib_offset="repository/shared/library"
 qt_ver='max'
 # Pauses the script before executing a command.
 flag_pause=true
+# Set the default architecture.
+architecture="$(uname -m)"
 # When running from a 'aarch64' machine set some other defaults.
-if [[ "$(uname -m)" == 'aarch64' ]]; then
+if [[ "${architecture}" == 'aarch64' ]]; then
 	base_img_name='arm64v8/ubuntu'
 	platform='arm64'
 fi
-# Set the default architecture.
-architecture="$(uname -m)"
 
 # Prints the help.
 #
@@ -77,7 +77,7 @@ function show_help {
     run             : Runs the docker container named '${container_name}' in the foreground mounting without passing the hosts X11 server.
     runx            : Same as 'run' passing the hosts X11 server.
     stop            : Stops the container named '${container_name}' running in the background.
-    start           : Starts the container named '${container_name}' running in the background with sshd service enabled.
+    start           : Starts the container named '${container_name}' running in the background with sshd service enabled at port 3022.
     startx          : Same as 'start' passing the hosts X11 server.
     kill            : Kills the container named '${container_name}' running in the background.
     status          : Return the status of named '${container_name}' the container running in the background.
@@ -190,12 +190,12 @@ while true; do
 			;;
 
 		'--')
-			shift
+			shift 1
 			break
 			;;
 
 		*)
-			WriteLog "Internal error on argument (${1}) !" >&2
+			WriteLog "! Internal error on argument (${1})"
 			exit 1
 			;;
 	esac
@@ -419,6 +419,15 @@ case "${cmd}" in
 		docker image push "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}"
 		;;
 
+	pull)
+		# Logout from any current server.
+		docker logout
+		# Pull the image from the Nexus server.
+		docker pull "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}"
+		# Add tag without the Nexus server prefix.
+		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${platform}/${img_name}:${img_tag}"
+		;;
+
 	docker-push)
 		docker_img_name="${DOCKER_USER}/${platform}-${img_name%%:*}"
 		# Add tag to having the correct prefix so it can be pushed to a private repository.
@@ -433,15 +442,6 @@ case "${cmd}" in
 		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${docker_img_name}"
 		# Push the repository as latest.
 		docker image push "${docker_img_name}"
-		;;
-
-	pull)
-		# Logout from any current server.
-		docker logout
-		# Pull the image from the Nexus server.
-		docker pull "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}"
-		# Add tag without the Nexus server prefix.
-		docker tag "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}" "${platform}/${img_name}:${img_tag}"
 		;;
 
 	build | buildx)
@@ -476,7 +476,7 @@ case "${cmd}" in
 
 	versions)
 		# Just reenter the script using the the correct arguments.
-		"${0}" --base-ver "${base_img_tag}" --qt-ver "${qt_ver}" run -- /home/user/bin/versions.sh
+		"${0}" --yes --base-ver "${base_img_tag}" --qt-ver "${qt_ver}" run -- /home/user/bin/versions.sh
 		;;
 
 	run | runx | start | startx)
@@ -501,15 +501,15 @@ case "${cmd}" in
 		dckr_cmd+=(--env LOCAL_USER="$(id -u):$(id -g)")
 		dckr_cmd+=(--user user:user)
 		dckr_cmd+=(--env DEBUG=1)
-		#dckr_cmd+=(--volume "${work_dir}/bin:/usr/local/bin/test:ro")
 		if [[ "${cmd}" == "runx" || "${cmd}" == "startx" ]]; then
 			# Check if the host has a X11 display running at all.
 			if [[ -z "${DISPLAY}" || ! -f "${HOME}/.Xauthority" ]]; then
-				WriteLog "Cannot pass X11, DISPLAY or .Xauthority not available!"
+				WriteLog "! Cannot pass X11, DISPLAY or .Xauthority not available."
 			fi
 			dckr_cmd+=(--env DISPLAY)
 			dckr_cmd+=(--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro")
 		fi
+		#dckr_cmd+=(--volume "${work_dir}/bin:/usr/local/bin/test:ro")
 		dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
 		dckr_cmd+=(--volume "${script_dir}:/mnt/script:ro")
 		dckr_cmd+=(--workdir "/mnt/project/")
