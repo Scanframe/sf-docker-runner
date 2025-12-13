@@ -12,7 +12,7 @@ raw_lib_offset="repository/shared/library"
 
 # Prints the help.
 #
-function ShowHelp {
+function show_help {
 	local cmd_name
 	# Get only the filename of the current script.
 	cmd_name="$(basename "${0}")"
@@ -35,6 +35,7 @@ function ShowHelp {
     list        : List remote images on Nexus server.
     login       : Log Docker in on the self hosted Nexus registry repository.
     docker-login: Log Docker in on docker.com registry as '${DOCKER_USER}'.
+    docker-list : List Docker images and tags from the docker.com registry from user '${DOCKER_USER}'.
     logout      : Log docker out from any repository.
     prune       : Remove all Docker build cache.
     remove      : Removes a local image. (not implemented)
@@ -87,7 +88,7 @@ EOD
 
 # When no arguments or options are given show the help.
 if [[ $# -eq 0 ]]; then
-	ShowHelp
+	show_help
 	exit 1
 fi
 
@@ -106,7 +107,7 @@ cd "${script_dir}" || exit 1
 temp=$(getopt -o 'hp:' --long 'help,help-short,project:' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
-	ShowHelp
+	show_help
 	exit 1
 fi
 
@@ -116,12 +117,12 @@ while true; do
 	case "$1" in
 
 		-h | --help)
-			ShowHelp
+			show_help
 			exit 0
 			;;
 
 		--help-short)
-			ShowHelp 1
+			show_help 1
 			exit 0
 			;;
 
@@ -183,6 +184,18 @@ case "${cmd}" in
 		echo -n "${DOCKER_PASSWORD}" | docker login --username "${DOCKER_USER}" --password-stdin
 		;;
 
+	docker-list)
+		# Get list of repositories
+		repos=$(curl --silent "https://hub.docker.com/v2/repositories/${DOCKER_USER}/?page_size=100" | jq -r '.results[].name')
+		# Loop through each repository and get tags
+		{
+			for repo in $repos; do
+				curl --silent "https://hub.docker.com/v2/repositories/${DOCKER_USER}/${repo}/tags?page_size=100" |
+					jq -r "\"${DOCKER_USER}/${repo}:\" + (.results[] | .name + \"|\" + (.full_size / 1e9 | tostring) + \" GB\" + \"|\" + .digest + \"|\" + .tag_last_pushed)"
+			done
+		} | column --table --separator '|' --table-columns 'Image/Tag,Size,Digest,Last Pushed'
+		;;
+
 	logout)
 		docker logout "${NEXUS_REPOSITORY}"
 		;;
@@ -209,7 +222,7 @@ case "${cmd}" in
 
 	*)
 		echo "Command '${cmd}' is invalid!"
-		ShowHelp
+		show_help
 		exit 1
 		;;
 

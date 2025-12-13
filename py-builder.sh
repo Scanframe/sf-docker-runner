@@ -5,6 +5,11 @@ set -e
 
 # Get the script directory.
 script_dir="$(cd "$(dirname "${0}")" && pwd)"
+# Include WriteLog function.
+source "${script_dir}/inc/Miscellaneous.sh"
+## Trap script exit with function.
+trap 'ScriptExit "${BASH_SOURCE}" "${BASH_LINENO}" "${BASH_COMMAND}"' EXIT
+
 # Set the base image tag of the FROM statement used.
 base_img_tag="24.04"
 # Default platform for this.
@@ -25,7 +30,7 @@ fi
 
 # Prints the help.
 #
-function ShowHelp {
+function show_help {
 	local cmd_name
 	# Get only the filename of the current script.
 	cmd_name="$(basename "${0}")"
@@ -55,13 +60,13 @@ function ShowHelp {
 
 # When no arguments or options are given show the help.
 if [[ $# -eq 0 ]]; then
-	ShowHelp
+	show_help
 	exit 1
 fi
 
 # Check if the required credential file exists.
 if [[ ! -f "${script_dir}/.nexus-credentials" ]]; then
-	echo "File '${script_dir}/.nexus-credentials' is required."
+	WriteLog "! File '${script_dir}/.nexus-credentials' is required."
 	exit 1
 fi
 # Read the credentials from non repository file.
@@ -80,7 +85,7 @@ cd "${script_dir}" || exit 1
 temp=$(getopt -o 'hp:' --long 'help,platform:,project:' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
-	ShowHelp
+	show_help
 	exit 1
 fi
 
@@ -90,7 +95,7 @@ while true; do
 	case "$1" in
 
 		-h | --help)
-			ShowHelp
+			show_help
 			exit 0
 			;;
 
@@ -100,17 +105,17 @@ while true; do
 			# When the platform does not match the default base image modify it.
 			if [[ "${platform}" == 'arm64' && "${base_img_name}" =~ ^amd64 ]]; then
 				base_img_name='arm64v8/ubuntu'
-				echo "Defaulting platform '${platform}' to base image '${base_img_name}'."
+				WriteLog "Defaulting platform '${platform}' to base image '${base_img_name}'."
 			elif [[ "${platform}" == 'amd64' && "${base_img_name}" =~ ^arm64 ]]; then
 				base_img_name='amd64/ubuntu'
-				echo "Defaulting platform '${platform}' to base image '${base_img_name}'."
+				WriteLog "Defaulting platform '${platform}' to base image '${base_img_name}'."
 			fi
 			continue
 			;;
 
 		-p | --project)
 			if [[ ! -d "${2}" ]]; then
-				echo "Project directory '${2}' does not exist!"
+				WriteLog "! Project directory '${2}' does not exist."
 				exit 1
 			fi
 			project_dir="$(realpath "${2}")"
@@ -173,7 +178,7 @@ case "${cmd}" in
 		# Stop all containers using this image.
 		# shellcheck disable=SC2046
 		if [[ -n "$(docker ps -a -q --filter ancestor="${platform}/${img_name}")" ]]; then
-			echo "Stopping containers using image '${platform}/${img_name}'."
+			WriteLog "Stopping containers using image '${platform}/${img_name}'."
 			docker stop $(docker ps -a -q --filter ancestor="${platform}/${img_name}")
 		fi
 		# Build the image.
@@ -201,7 +206,7 @@ case "${cmd}" in
 
 	run | runx)
 		if [[ -z "${project_dir}" ]]; then
-			echo "Project (option: -p) is required for this command."
+			WriteLog "! Project (option: -p) is required for this command."
 			exit 1
 		fi
 		# Use option '--privileged' instead of '--device' and '--security-opt' when having fuse mounting problems.
@@ -236,10 +241,10 @@ case "${cmd}" in
 		# Stop this docker container only.
 		cntr_id="$(docker ps --filter name="${container_name}" --quiet)"
 		if [[ -n "${cntr_id}" ]]; then
-			echo "Container ID is '${cntr_id}' and performing '${cmd}' command."
+			WriteLog "Container ID is '${cntr_id}' and performing '${cmd}' command."
 			docker "${cmd}" "${cntr_id}"
 		else
-			echo "Container '${container_name}' is not running."
+			WriteLog "Container '${container_name}' is not running."
 		fi
 		;;
 
@@ -261,8 +266,8 @@ case "${cmd}" in
 		if "${script_dir}/nexus-docker.sh" "${cmd}"; then
 			exit 0
 		fi
-		echo "Command '${cmd}' is invalid!"
-		ShowHelp
+		WriteLog "! Command '${cmd}' is invalid."
+		show_help
 		exit 1
 		;;
 

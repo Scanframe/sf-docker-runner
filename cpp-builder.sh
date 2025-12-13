@@ -7,6 +7,8 @@ set -e
 script_dir="$(cd "$(dirname "${0}")" && pwd)"
 # Include WriteLog function.
 source "${script_dir}/inc/Miscellaneous.sh"
+## Trap script exit with function.
+trap 'ScriptExit "${BASH_SOURCE}" "${BASH_LINENO}" "${BASH_COMMAND}"' EXIT
 
 # Set the base image tag of the FROM statement used.
 base_img_tag="24.04"
@@ -39,10 +41,6 @@ if [[ "$(uname -m)" == 'aarch64' ]]; then
 fi
 # Set the default architecture.
 architecture="$(uname -m)"
-
-function WriteLog {
-	echo "${@}" 1>&2
-}
 
 # Prints the help.
 #
