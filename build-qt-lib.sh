@@ -19,6 +19,8 @@ cd "${run_dir}"
 os_name="$(uname -o)"
 # Qt repository URL.
 qt_repo="https://code.qt.io/qt/qt5.git"
+# Ignored submodules which are huge and not used.
+mods_ignore=(qtwebchannel qtwebengine qtwebglplugin qtwebview)
 
 # Install base directory for this machine.
 dir_file="${run_dir}/.install-dir-$(uname -n)"
@@ -36,6 +38,8 @@ qt_ver="0.0.0"
 
 # Initialize the cross-compile flag.
 flag_cross=false
+# Initialize the ignore flag on not being in Docker container.
+flag_ignore=false
 
 function show_help {
 	echo "Used to build the Qt framework libraries from source."
@@ -78,7 +82,7 @@ Steps to build Qt v${qt_ver} in order are:
 }
 
 # Parse options.
-temp=$(getopt -o 'hw' --long 'help,qt-ver:,windows:' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hw' --long 'help,qt-ver:,windows:,ignore' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	show_help
@@ -98,6 +102,11 @@ while true; do
 		-w | --windows)
 			shift
 			flag_cross=true
+			;;
+
+		--ignore)
+			shift
+			flag_ignore=true
 			;;
 
 		--qt-ver)
@@ -316,7 +325,7 @@ esac
 # When not in docker bailout here.
 if [[ ! -f /.dockerenv && "${os_name}" == "GNU/Linux" ]]; then
 	WriteLog "Command '$1' only available from within the docker container."
-	exit 1
+	[[ ! $flag_ignore ]] && exit 1
 fi
 
 # Command available from within Docker.
@@ -354,17 +363,35 @@ case $1 in
 
 	clone)
 		report
-		WriteLog "- Cloning repository from tag 'v${qt_ver}'".
+		WriteLog "- Cloning repository from tag 'v${qt_ver}' in '${repo_dir}'".
 		# Check if the directory is empty by checking the existence of the README.md file.
 		if [[ -f "${repo_dir}/README.md" ]]; then
 			WriteLog "Already cloned: v${qt_ver} ${qt_repo} ${repo_dir}"
 		else
 			if [[ "${os_name}" == "Cygwin" ]]; then
-				"${git_cmd}" clone --branch "v${qt_ver}" "${qt_repo}" "$(cygpath -w "${repo_dir}")/"
+				"${git_cmd}" clone --depth 1 --branch "v${qt_ver}" --recurse-submodules --shallow-submodules "${qt_repo}" "$(cygpath -w "${repo_dir}")/"
 			else
-				"${git_cmd}" clone --branch "v${qt_ver}" "${qt_repo}" "${repo_dir}/"
+				"${git_cmd}" clone --depth 1 --branch "v${qt_ver}" "${qt_repo}" "${repo_dir}/"
 			fi
 		fi
+		WriteLog "For each submodule..."
+		pushd "${repo_dir}" >/dev/null
+		# Set the shallow flag (not sure this does anything).
+		"${git_cmd}" config --file .gitmodules --name-only --get-regexp path$ |
+			sed 's/\.path//' |
+			while read -r name; do
+				git config -f .gitmodules "$name.shallow" true
+			done
+#		# Check out all submodules except the ones ignored.
+#		"${git_cmd}" config --file .gitmodules --get-regexp path$ | sed -r 's/.* //' | while read -r name; do
+#			if InArray "${name}" "${mods_ignore[@]}"; then
+#				WriteLog "# Ignoring submodule: ${name}"
+#			else
+#				WriteLog "~ Initializing submodule (shallow): ${name}"
+#				"${git_cmd}" submodule update --init --depth 1 "${name}"
+#			fi
+#		done
+		popd
 		;;
 
 	update)
@@ -381,11 +408,14 @@ case $1 in
 	init | init-norm)
 		report
 		WriteLog "- Initialize submodules..."
+		# Assemble the options array.
+		options=("--module-subset=default" "${mods_ignore[@]}")
 		pushd "${repo_dir}" >/dev/null
 		if [[ "${os_name}" == "Cygwin" ]]; then
 			WriteLog "Initializing repository sub modules..."
 			if [[ "${1}" == "init" ]]; then
-				cmd /c "$(cygpath -w "${PWD}/init-repository.bat")" --force --branch --module-subset=default,-qtwebchannel,-qtwebengine,-qtwebglplugin,-qtwebview
+				WriteLog "# Options: $(JoinBy ",-" "${options[@]}")"
+				cmd /c "$(cygpath -w "${PWD}/init-repository.bat")" --force "$(JoinBy "," "${options[@]}")"
 			else
 				cmd /c "$(cygpath -w "${PWD}/init-repository.bat")" --force --branch --module-subset=default
 			fi
@@ -401,9 +431,9 @@ case $1 in
 			if [[ "${1}" == "init" ]]; then
 				# Omit module qtwebengine when 'https://code.qt.io/qt/qtwebengine-chromium.git' since giving a 503 error.
 				# Some additional modules need to be omitted due to failing configuration and this seems to fix that.
-				./init-repository --force --branch --module-subset=default,-qtwebchannel,-qtwebengine,-qtwebglplugin,-qtwebview
+				./init-repository --branch "$(JoinBy ",-" "${options[@]}")"
 			else
-				./init-repository --force --branch --module-subset=default
+				./init-repository --branch --module-subset=default
 			fi
 		fi
 		popd >/dev/null

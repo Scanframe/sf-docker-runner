@@ -37,7 +37,7 @@ function show_help {
     docker-login: Log Docker in on docker.com registry as '${DOCKER_USER}'.
     docker-list : List Docker images and tags from the docker.com registry from user '${DOCKER_USER}'.
     logout      : Log docker out from any repository.
-    prune       : Remove all Docker build cache.
+    prune       : Removes build cache and internal/frontend images.
     remove      : Removes a local image. (not implemented)
     wine-reg    : Compress registry files from common/wine-reg.
     wine-reg-up : Upload compressed registry files to Nexus raw repository.
@@ -161,7 +161,6 @@ case "${cmd}" in
 		;;
 
 	local)
-		#docker image ls --all
 		docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}"
 		;;
 

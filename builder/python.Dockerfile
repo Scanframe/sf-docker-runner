@@ -15,14 +15,14 @@ SHELL ["/bin/bash", "-c"]
 
 # Install wine 64-bit only and Wine HQ to get Wine version 9.0 eventually.
 # Also add 'xvfb' to create a fake X-server to run and install Wine properly.
-# Debian/Ubuntu systems, you need to install the python3-venv to make ensurepip is available.
+# Debian/Ubuntu systems, you need to install the python3-venv to make ensure pip is available.
 RUN apt-get update && apt-get --yes upgrade && \
     apt --yes install wget curl gpg iputils-ping lsb-release software-properties-common binutils iproute2 iputils-ping && \
     add-apt-repository --yes --no-update ppa:git-core/ppa && \
     apt-get --yes install \
     locales sudo git bindfs fuse-zip dialog jq recode pcregrep zip joe mc colordiff dos2unix libopengl0 strace exiftool x11-apps xcb \
     libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-xinput0 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 wine64 xvfb \
-    python3 python3-venv python3-dev && \
+    python3 python3-venv python3-dev python-is-python3 && \
     apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*
 
 
