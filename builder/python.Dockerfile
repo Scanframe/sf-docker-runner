@@ -22,7 +22,7 @@ RUN apt-get update && apt-get --yes upgrade && \
     apt-get --yes install \
     locales sudo git bindfs fuse-zip dialog jq recode pcregrep zip joe mc colordiff dos2unix libopengl0 strace exiftool x11-apps xcb \
     libxkbcommon-x11-0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-xinput0 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 wine64 xvfb \
-    python3 python3-venv python3-dev python-is-python3 && \
+    python3 python3-venv python3-dev python3-pefile python3-pyelftools python3-requests python-is-python3 && \
     apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*
 
 
@@ -135,14 +135,16 @@ RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
 
 # Create an 'import.reg' registry file for the 'entrypoint.sh' script to import since
 # somehow the Wine registry during a build does not work.
-RUN if [[ "$(uname -m)" == "x86_64" ]]; then \
-    sudo --user=user -- printf "\
-Windows Registry Editor Version 5.00\n\
-\n\
-[HKEY_CURRENT_USER\Environment]\n\
-\"PATH\"=\"C:\\\\\\python;C:\\\\\\python\\\\\\Scripts\"\n\
-\n" > "${HOME}/import.reg" ;\
-    fi
+RUN <<'EOF'
+if [[ "$(uname -m)" == "x86_64" ]]; then
+	sudo --user=user -- echo 'Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Environment]
+"PATH"="C:\\python;C:\\python\\Scripts"
+
+' > "${HOME}/import.reg"
+fi
+EOF
 
 # Ubuntu 24.04 has a default 'ubuntu' user.
 RUN userdel --remove ubuntu || exit 0

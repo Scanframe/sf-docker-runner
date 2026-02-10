@@ -28,7 +28,8 @@ RUN apt-get update && apt-get --yes upgrade && \
     apt-get --yes install \
     locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb-mingw-w64-target ccache gdb gdbserver valgrind clang-format chrpath dpkg-dev \
     bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix shfmt pkg-config \
-    python3 python3-venv python-is-python3 libopengl0 libgl1-mesa-dev libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev libunwind-dev \
+    python3 python3-venv python3-dev python3-pefile python3-pyelftools python3-requests python-is-python3 \
+	libopengl0 libgl1-mesa-dev libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev libunwind-dev \
     strace exiftool rpm nsis x11-apps xcb libxkbcommon-x11-0 libxcb-xinput0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 \
     libxcb-keysyms1 libxcb-render-util0 xvfb libpcre2-16-0 && \
     apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*
@@ -172,6 +173,12 @@ RUN if [[ -n "${QT_VERSION}" ]]; then \
 RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then \
       wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-x86_64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-win-x86_64.zip" || exit 1 ; \
       wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-aarch64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-lnx-aarch64.zip" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-w64-x86_64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-w64-x86_64.zip" || exit 1 ; \
+    fi
+# Get the tools needed for compiling with MSVC in Wine.
+RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/win-x86_64-cmake-4.2-combi.zip" -qO "tool-combi.zip" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-msvc-2022.zip" -qO "msvc.zip" || exit 1 ; \
     fi
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
@@ -197,17 +204,17 @@ RUN userdel --remove ubuntu || exit 0
 # Allow the initial user to run the sudo command.
 RUN usermod -aG sudo user
 
-# Create an 'import.reg' registry file for the 'entrypoint.sh' script to import since
-# somehow the Wine registry during a build does not work.
-RUN if [[ "$(uname -m)" == "x86_64" ]]; then \
-    sudo --user=user -- printf "\
-Windows Registry Editor Version 5.00\n\
-\n\
-[HKEY_CURRENT_USER\Environment]\n\
-\"PATH\"=\"C:\\\\\\python;C:\\\\\\python\\\\\\Scripts\"\n\
-\n" > "${HOME}/import.reg" ;\
-    fi
-# && sudo --user=user WINEPREFIX="${WINEPREFIX}" wine regedit "${HOME}/import.reg" \
+RUN <<'EOF'
+if [[ "$(uname -m)" == "x86_64" ]]; then
+	sudo --user=user -- echo 'Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Environment]
+"PATH"="Z:\\home\\user\\tools\\bin;Z:\\home\\user\\tools\\cmake\\bin;Z:\\home\\user\\tools\\nsis;Z:\\home\\user\\tools\\python;Z:\\home\\user\\tools\\python\\Scripts"
+"TEMP=Z:\\tmp"
+"TMP=Z:\\tmp"
+' > "${HOME}/import.reg"
+fi
+EOF
 
 # Make sure the user inside the docker container has the same ID as the user outside
 COPY --chown="user:user" --chmod=755 bin/*.sh "${HOME}/bin/"

@@ -87,7 +87,6 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			fi
 		fi
 	fi
-
 	# Check if the Qt zipped libraries are available.
 	if [[ -d "/usr/local/lib/qt" ]]; then
 		WriteLog "Qt zipped library is available."
@@ -98,7 +97,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		declare -A arch_qt_ver_dir
 		# Iterate through all the qt-*.zip files and mount them at the correct places.
 		for zip_file in "${HOME}/qt-"*.zip; do
-			if [[ "$(basename "${zip_file}")" =~ ^qt-((lnx|win)-([a-z_0-9]*))\.zip$ ]]; then
+			if [[ "$(basename "${zip_file}")" =~ ^qt-((lnx|win|w64)-([a-z_0-9]*))\.zip$ ]]; then
 				mount_dir="${HOME}/lib/qt/${BASH_REMATCH[1]}"
 				if mkdir --parent "${mount_dir}"; then
 					if ! fuse-zip -o rw,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
@@ -115,6 +114,30 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		if [[ -d "${arch_qt_ver_dir['lnx-x86_64']}" && -d "${arch_qt_ver_dir['lnx-aarch64']}" ]]; then
 			mv "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec-original" &&
 				ln -rs "${arch_qt_ver_dir['lnx-x86_64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec"
+		fi
+		# Mount the combination of tools.
+		zip_file="${HOME}/tool-combi.zip"
+		if [[ -f "${zip_file}" ]]; then
+			mount_dir="${HOME}/tools"
+			if mkdir --parent "${mount_dir}"; then
+				if ! fuse-zip -o rw,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
+					WriteLog "Mounting tool zip-file '${zip_file}' onto '${mount_dir}' failed!"
+				else
+					WriteLog "Zipped tool file '${zip_file}' is mounted on '${mount_dir}'."
+				fi
+			fi
+		fi
+		# Mount the combination of tools.
+		zip_file="${HOME}/msvc.zip"
+		if [[ -f "${zip_file}" ]]; then
+			mount_dir="${HOME}/toolchain"
+			if mkdir --parent "${mount_dir}"; then
+				if ! fuse-zip -o rw,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
+					WriteLog "Mounting tool zip-file '${zip_file}' onto '${mount_dir}' failed!"
+				else
+					WriteLog "Zipped tool file '${zip_file}' is mounted on '${mount_dir}'."
+				fi
+			fi
 		fi
 	fi
 

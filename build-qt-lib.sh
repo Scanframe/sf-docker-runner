@@ -36,6 +36,13 @@ fi
 # Initial Qt version to compile.
 qt_ver="0.0.0"
 
+# Default compiler when running Cygwin.
+if [[ "${os_name}" == "Cygwin" ]]; then
+	compiler="mingw"
+else
+	compiler=""
+fi
+
 # Initialize the cross-compile flag.
 flag_cross=false
 # Initialize the ignore flag on not being in Docker container.
@@ -44,13 +51,16 @@ flag_ignore=false
 function show_help {
 	echo "Used to build the Qt framework libraries from source."
 	echo "Available options:
-  -w, --windows : Crosscompile for Windows flag (all commands)
-  --qt-ver      : Qt version to build.
+  -w, --windows   : Crosscompile for Windows flag (all commands)
+  --qt-ver        : Qt version to build.
+  -c, --compiler  : Compiler (mingw, msvc) for Windows to load the correct load toolchain file (default: ${compiler}).
+                    File is named like: '.toolchain-<compiler>-<hostname>
 "
 	echo "Available commands:
   help      : Shows this help.
   tags      : Show the tags of the remote repository.
   run       : Run the Docker container for this script to execute.
+  env       : Prints environment variables.
   start     : Start the Docker container for this script to execute in the background.
   stop      : Stop the Docker container for this script to execute in the background.
   attach    : Attach to the Docker container for this script to execute in the background.
@@ -65,7 +75,7 @@ function show_help {
   feat-help : Show all possible features.
   conf-help : Show available configuration options.
   conf      : Configure cmake.
-  sum       : Show the summary of enabled features.
+  summary   : Show the summary of enabled features.
   check     : Check if the features are set (e.g. 'system_xcb_xinput') and if 'fix' command is to be called.
   fix       : Sets the feature(s) by modifying 'CMakeCache.txt' still not being set using the -feature-???? option.
   check     : Shows the required features from CMakeCache.txt and allows checking for 'ON' to build 'libqxcb.so'.
@@ -77,12 +87,12 @@ function show_help {
   clean     : Removes the build directory.
 
 Steps to build Qt v${qt_ver} in order are:
-  deps, local, clone, init, conf, fix, build, install ,zip
+  deps, local, clone, init, conf, fix, build, install, zip
 "
 }
 
 # Parse options.
-temp=$(getopt -o 'hw' --long 'help,qt-ver:,windows:,ignore' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hc:w' --long 'help,qt-ver:,compiler:,windows:,ignore' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	show_help
@@ -111,6 +121,12 @@ while true; do
 
 		--qt-ver)
 			qt_ver="${2}"
+			shift 2
+			continue
+			;;
+
+		-c | --compiler)
+			compiler="${2}"
 			shift 2
 			continue
 			;;
@@ -233,8 +249,8 @@ lib_dir="${lib_base_dir}/${os_code}-$(uname -m)"
 build_dir="${run_dir}/build-${os_code}-$(uname -m)"
 # Install directory for cmake.
 if [[ "${os_name}" == "Cygwin" ]]; then
-	install_dir="${lib_dir}/${qt_ver}/mingw_64"
-	build_dir="/cygdrive/p/tmp/build-${os_code}-$(uname -m)"
+	install_dir="${lib_dir}/${qt_ver}/${compiler}_64"
+	build_dir="/cygdrive/p/tmp/build-${compiler}-${os_code}-$(uname -m)"
 	if [[ -n "${TEMP}" ]]; then
 		repo_dir="${TEMP}/${repo_dir}"
 	else
@@ -253,21 +269,8 @@ zip_file="${zip_file_base}.zip"
 
 # Detect windows using the cygwin 'uname' command.
 if [[ "${os_name}" == "Cygwin" ]]; then
-	# Tools directory for this machine.
-	dir_file="${run_dir}/.tools-dir-$(uname -n)"
-	# Check if the directory file exists.
-	if [[ -f "${dir_file}" ]]; then
-		# Read the first line of the file and strip the newline.
-		tools_dir="$(head -n 1 "${dir_file}" | tr -d '\n' | tr -d '\n' | tr -d '\r')"
-		if [[ -d "${tools_dir}" ]]; then
-			export PATH="${tools_dir}:${PATH}"
-			WriteLog "- Tools directory added to PATH: ${tools_dir}"
-		else
-			WriteLog "- Non-existing tools directory: ${tools_dir}"
-		fi
-	else
-		WriteLog "! No tools directory specified using file: ${dir_file}"
-	fi
+	# Tools directory for this machine using the specified compiler.
+	GetEnvironmentFromFile "${run_dir}/.toolchain-${compiler}-$(uname -n)"
 elif [[ "${os_name}" == "GNU/Linux" ]]; then
 	WriteLog "# Linux $(uname -m) detected"
 else
@@ -278,18 +281,23 @@ function report {
 	WriteLog "
 # Operating System  : ${os_name} (${os_code})
 # Qt Repository     : ${qt_repo} (v${qt_ver})
+# Compiler          : ${compiler} (Windows only)
+# Repo directory    : ${repo_dir}
 # Run directory     : ${run_dir}
 # Build Directory   : ${build_dir}
 # Library Directory : ${lib_dir}
 # Install Directory : ${install_dir}
 # Zip file          : ${zip_file}
 # Git Command       : ${git_cmd}"
+
 	if [[ "${os_name}" == "Cygwin" ]]; then
-		WriteLog "
-# Windows Tools File: ${dir_file}
-# Windows Tools Dir : ${tools_dir}
-# Compiler Version  : $(test -f "${tools_dir}/gcc" && "${tools_dir}/gcc" --version | head -n 1 | tr -d '\n' | tr -d '\r')
-"
+		WriteLog "# Windows Tools File: ${dir_file}"
+		if command -v gcc >/dev/null;then 
+			WriteLog "# GCC Version       : $("gcc" --version | head -n 1 | tr -d '\n' | tr -d '\r')"
+		fi
+		if command -v cl1 >/dev/null; then 
+			WriteLog  "# MSVC Version      : $("cl" 2>&1 | head -n 1 | tr -d '\n' | tr -d '\r')"
+		fi
 	fi
 }
 
@@ -331,6 +339,11 @@ fi
 # Command available from within Docker.
 case $1 in
 
+	env)
+		report
+		printenv
+		;;
+
 	deps)
 		report
 		WriteLog "- Install dependent packages..."
@@ -350,17 +363,25 @@ case $1 in
 		;;
 
 	local)
-		WriteLog "- Creating symlink to tmp directory for repository directory for speed."
-		# Create a symlink for the repository in the temp directory to speed up
-		mkdir -p "/tmp/${repo_dir}"
-		# Only create the symlink when it does not exist.
-		if [[ ! -L "${repo_dir}" ]]; then
-			ln -s "/tmp/${repo_dir}/" "${repo_dir}"
+		if [[ "${os_name}" == "Cygwin" ]]; then
+			WriteLog "- Ignored in Cygwin on Windows."
 		else
-			WriteLog "- Symlink '${repo_dir}' exists."
+			WriteLog "- Creating symlink to tmp directory for repository directory for speed."
+			# Create a symlink for the repository in the temp directory to speed up
+			mkdir -p "/tmp/${repo_dir}"
+			# Only create the symlink when it does not exist.
+			if [[ ! -L "${repo_dir}" ]]; then
+				ln -s "/tmp/${repo_dir}/" "${repo_dir}"
+			else
+				WriteLog "- Symlink '${repo_dir}' exists."
+			fi
 		fi
 		;;
 
+	vers)
+		git -C "${repo_dir}" ls-remote --tags 
+		;;
+		
 	clone)
 		report
 		WriteLog "- Cloning repository from tag 'v${qt_ver}' in '${repo_dir}'".
@@ -369,11 +390,15 @@ case $1 in
 			WriteLog "Already cloned: v${qt_ver} ${qt_repo} ${repo_dir}"
 		else
 			if [[ "${os_name}" == "Cygwin" ]]; then
-				"${git_cmd}" clone --depth 1 --branch "v${qt_ver}" --recurse-submodules --shallow-submodules "${qt_repo}" "$(cygpath -w "${repo_dir}")/"
+				"${git_cmd}" clone --depth 1 --single-branch --branch "v${qt_ver}" --recurse-submodules --shallow-submodules "${qt_repo}" "$(cygpath -w "${repo_dir}")/"
+				#"${git_cmd}" clone --branch "v${qt_ver}" "${qt_repo}" "$(cygpath -w "${repo_dir}/")"
 			else
 				"${git_cmd}" clone --depth 1 --branch "v${qt_ver}" "${qt_repo}" "${repo_dir}/"
 			fi
 		fi
+		;;
+		
+	clone2)
 		WriteLog "For each submodule..."
 		pushd "${repo_dir}" >/dev/null
 		# Set the shallow flag (not sure this does anything).
@@ -550,6 +575,7 @@ EOD
 			fi
 		fi
 		conf_cmd+=(-release)
+		#conf_cmd+=(-force-debug-info)
 		conf_cmd+=(-opensource)
 		conf_cmd+=(-confirm-license)
 		conf_cmd+=(-make libs)
@@ -600,7 +626,7 @@ EOD
 		popd >/dev/null
 		;;
 
-	sum)
+	summary)
 		less "${build_dir}/config.summary"
 		;;
 
@@ -635,9 +661,12 @@ EOD
 		;;
 
 	install)
-		if [[ -d "${lib_dir}/${qt_ver}" ]]; then
-			WriteLog "- Renaming version directory '${lib_dir}/${qt_ver}' first."
-			mv "${lib_dir}/${qt_ver}" "${lib_dir}/${qt_ver}_$(date +'%FT%T')"
+		if [[ -d "${install_dir}" ]]; then
+			WriteLog "- Renaming compiler directory '${install_dir}' first."
+			timestamp="$(date +'%FT%T')"
+			# Removing ':'  for Windows.
+			timestamp="${timestamp//:/_}"
+			mv "${install_dir}" "${install_dir}_${timestamp}"
 		fi
 		pushd "${build_dir}" >/dev/null
 		cmake --install .

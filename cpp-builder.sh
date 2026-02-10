@@ -70,10 +70,12 @@ function show_help {
     qt-win          : Generates the 'qt-win.zip' from the current user's Cross Windows Qt framework/library location.
     qt-w64          : Generates the 'qt-w64.zip' from the Windows Qt library relative to the current user's Qt.
     qt-w64-tools    : Generates the 'qt-tools.zip' from the Windows Qt library relative to the current user's Qt.
+    wine-tools      : Generates the 'win-x86_64-cmake-4.2-combi.zip'.
     qt-lnx-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-lnx-<architecture>-<qt-ver>.zip'.
     qt-win-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-win-<architecture>-<qt-ver>.zip'.
     qt-w64-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-<architecture>-<qt-ver>.zip'.
     qt-w64-tools-up : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-tools.zip'.
+    wine-tools-up   : Uploads the generated zip-file to the Nexus server'.
     run             : Runs the docker container named '${container_name}' in the foreground mounting without passing the hosts X11 server.
     runx            : Same as 'run' passing the hosts X11 server.
     stop            : Stops the container named '${container_name}' running in the background.
@@ -363,7 +365,7 @@ case "${cmd}" in
 		# Fix the permissions on exe and dll and other files for Cygwin to make them executable.
 		find . \( -iname "*.dll" -o -iname "*.exe" -o -iname "*.cmd" -o -iname "*.bat" \) -exec chmod +x {} \;
 		# Zip the files of the library.
-		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}/mingw_64/"{bin,lib,include,libexec,mkspecs,plugins}
+		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}"/{mingw_64,msvc_64}/{bin,lib,include,libexec,mkspecs,plugins}
 		popd
 		ls -lah "${zip_file}"
 		;;
@@ -395,7 +397,7 @@ case "${cmd}" in
 		# Fix the permissions on exe and dll and other files for Cygwin to make them executable.
 		find . \( -iname "*.dll" -o -iname "*.exe" -o -iname "*.cmd" -o -iname "*.bat" \) -exec chmod +x {} \;
 		WriteLog "Zip Windows MinGW compiler '${toolchain}'."
-		# Zip all GNU compiler versions.
+		# Zip the GNU compiler version.
 		zip --quiet --display-bytes --recurse-paths --symlinks "${zip_file}" "${toolchain}"
 		popd
 		ls -lah "${zip_file}"
@@ -404,6 +406,39 @@ case "${cmd}" in
 	qt-w64-tools-up)
 		# Form the zip-filepath using the found or set Qt version.
 		zip_file="${temp_dir}/${toolchain}.zip"
+		# Upload file Windows Qt library.
+		curl \
+			--progress-bar \
+			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+			--upload-file "${zip_file}" \
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/toolchain/"
+		;;
+
+	wine-tools)
+		tool_combi="win-x86_64-cmake-4.2-combi"
+		combi_dir="${qt_lib_dir}/../toolchain/${tool_combi}"
+		if [[ ! -d "${combi_dir}" ]]; then
+			WriteLog "Tools directory '${combi_dir}' does not exist!"
+			exit 1
+		fi
+		# Form the zip-filepath using the found or set Qt version.
+		zip_file="${temp_dir}/${tool_combi}.zip"
+		# Remove the current zip file.
+		[[ -f "${zip_file}" ]] && rm "${zip_file}"
+		# Change directory in order for zip to store the correct path.
+		pushd "${combi_dir}"
+		# Fix the permissions on exe and dll and other files for Cygwin to make them executable.
+		WriteLog "Zipping Tool Combination '${tool_combi}'."
+		# Zip all symlinked files and directories as if the are actual.
+		zip --quiet --display-bytes --recurse-paths "${zip_file}" ./
+		popd
+		ls -lah "${zip_file}"
+		;;
+
+	wine-tools-up)
+		tool_combi="win-x86_64-cmake-4.2-combi"
+		# Form the zip-filepath using the found or set Qt version.
+		zip_file="${temp_dir}/${tool_combi}.zip"
 		# Upload file Windows Qt library.
 		curl \
 			--progress-bar \
