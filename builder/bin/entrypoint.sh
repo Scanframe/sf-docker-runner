@@ -123,22 +123,25 @@ if [[ "$(id -u)" -eq 0 ]]; then
 				if ! fuse-zip -o rw,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
 					WriteLog "Mounting tool zip-file '${zip_file}' onto '${mount_dir}' failed!"
 				else
-					WriteLog "Zipped tool file '${zip_file}' is mounted on '${mount_dir}'."
+					WriteLog "Zipped tool zip-file '${zip_file}' is mounted on '${mount_dir}'."
 				fi
 			fi
 		fi
-		# Mount the combination of tools.
-		zip_file="${HOME}/msvc.zip"
-		if [[ -f "${zip_file}" ]]; then
-			mount_dir="${HOME}/toolchain"
-			if mkdir --parent "${mount_dir}"; then
-				if ! fuse-zip -o rw,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
-					WriteLog "Mounting tool zip-file '${zip_file}' onto '${mount_dir}' failed!"
-				else
-					WriteLog "Zipped tool file '${zip_file}' is mounted on '${mount_dir}'."
+		for zip_file in "${HOME}/toolchain-"*.zip; do
+			if [[ "$(basename "${zip_file}")" =~ ^toolchain-([A-Za-z_0-9\-]*)\.zip$ ]]; then
+				mount_base="${HOME}/toolchain"
+				mount_dir="${mount_base}/${BASH_REMATCH[1]}"
+				if mkdir --parent "${mount_dir}"; then
+					if ! fuse-zip -o rw,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
+						WriteLog "Mounting toolchain zip-file '${zip_file}' onto '${mount_dir}' failed!"
+					else
+						WriteLog "Zipped toolchain zip-file '${zip_file}' is mounted on '${mount_dir}'."
+						# Create backwards compatible directory symlink.
+						ln --symbolic --target-directory="${mount_base}" "${mount_dir}/"*
+					fi
 				fi
 			fi
-		fi
+		done
 	fi
 
 	WriteLog "Working directory: $(pwd)"

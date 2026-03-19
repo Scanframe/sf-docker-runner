@@ -6,11 +6,12 @@ set -e
 set -o pipefail
 
 # Get the scripts run directory weather it is a symlink or not.
+script_dir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 run_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 run_dir="$(realpath "${run_dir}")"
 
 # Include WriteLog function.
-source "${run_dir}/inc/Miscellaneous.sh"
+source "${script_dir}/inc/Miscellaneous.sh"
 
 # Move to it.
 cd "${run_dir}"
@@ -190,6 +191,7 @@ lnx_pkgs+=(libx11-xcb-dev)
 lnx_pkgs+=(libx11-xcb1)
 lnx_pkgs+=(x11-apps)
 lnx_pkgs+=(xcb)
+lnx_pkgs+=(libxcb-xkb-dev)
 lnx_pkgs+=(libxkbcommon-x11-0)
 lnx_pkgs+=(libxcb-xinput0)
 lnx_pkgs+=(libxcb-cursor0)
@@ -227,6 +229,11 @@ lnx_pkgs+=(python3)
 lnx_pkgs+=(wayland-protocols)
 lnx_pkgs+=(zlib1g-dev)
 lnx_pkgs+=(libsm-dev)
+# Added for aarch64 since aarch64 Ubuntu does not have this apparently.
+lnx_pkgs+=(libpulse-dev)
+lnx_pkgs+=(pipewire)
+lnx_pkgs+=(ffmpeg)
+
 
 # Set some defaults depending on the current OS.
 if [[ "${os_name}" == "Cygwin" ]]; then
@@ -456,9 +463,9 @@ case $1 in
 			if [[ "${1}" == "init" ]]; then
 				# Omit module qtwebengine when 'https://code.qt.io/qt/qtwebengine-chromium.git' since giving a 503 error.
 				# Some additional modules need to be omitted due to failing configuration and this seems to fix that.
-				./init-repository --branch "$(JoinBy ",-" "${options[@]}")"
+				./init-repository --force --branch "$(JoinBy ",-" "${options[@]}")"
 			else
-				./init-repository --branch --module-subset=default
+				./init-repository --force --branch --module-subset=default
 			fi
 		fi
 		popd >/dev/null
@@ -574,6 +581,10 @@ EOD
 				#conf_cmd+=(-qpa wayland)
 			fi
 		fi
+
+		# This should change cache variable 'FEATURE_system_xcb_xinput` to be ON.
+		conf_cmd+=(-system-xcb -bundled-xcb-xinput no)
+		#
 		conf_cmd+=(-release)
 		#conf_cmd+=(-force-debug-info)
 		conf_cmd+=(-opensource)
@@ -614,8 +625,6 @@ EOD
 		conf_cmd+=(-no-feature-clang)
 		#conf_cmd+=(-qt3d-assimp)
 		# Execute the configuration command.
-
-		#conf_cmd+=(-qt3d-assimp)
 		if ${flag_cross}; then
 			conf_cmd+=("--")
 			conf_cmd+=(-DCMAKE_TOOLCHAIN_FILE="${build_dir}/toolchain.cmake")

@@ -439,6 +439,7 @@ case "${cmd}" in
 		tool_combi="win-x86_64-cmake-4.2-combi"
 		# Form the zip-filepath using the found or set Qt version.
 		zip_file="${temp_dir}/${tool_combi}.zip"
+		WriteLog "Tools directory zip file: ${zip_file}"
 		# Upload file Windows Qt library.
 		curl \
 			--progress-bar \
