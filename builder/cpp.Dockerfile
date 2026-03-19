@@ -177,9 +177,9 @@ RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then \
     fi
 # Get the tools needed for compiling with MSVC in Wine.
 RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/win-x86_64-cmake-4.2-combi.zip" -qO "tool-combi.zip" || exit 1 ; \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-msvc-2022.zip" -qO "toolchain-msvc.zip" || exit 1 ; \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-mingw-1320-posix.zip" -qO "toolchain-mingw.zip" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/win-x86_64-cmake-4.2-combi.zip?${NEXUS_TIMESTAMP}" -qO "tool-combi.zip" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-msvc-2022.zip?${NEXUS_TIMESTAMP}" -qO "toolchain-msvc.zip" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-mingw-1320-posix.zip?${NEXUS_TIMESTAMP}" -qO "toolchain-mingw.zip" || exit 1 ; \
     fi
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
