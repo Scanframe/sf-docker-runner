@@ -18,6 +18,51 @@ A script [`gitlab-runner.sh`](gitlab-runner.sh "Link to the script.") is provide
 
 ## 2) Create Docker C++ Build Image & Hosted on a Nexus Docker Registry
 
+### Primary Goal
+
+Create a comprehensive Docker-based C++ build environment that supports:
+
+1. **Multi-platform C++ compilation**
+	- Native Linux (x86_64 and aarch64)
+	- Windows cross-compilation (x86_64) using the Linux MinGW cross-compiler
+	- Windows compilation (using MinGW and MSVC via Wine)
+
+2. **Qt framework support**
+	- Building Qt from source for multiple platforms
+	- Packaging and hosting Qt libraries (versions like 6.8.1, 6.9.1, 6.10.1) for different architectures
+	- Cross-platform Qt development (Linux → Windows)
+
+3. **Developer tooling**
+	- JetBrains CLion integration for containerized development
+	- Support for debugging and running GUI applications via X11
+	- The Python tool is available in native Linux and also in Wine to support cross-platform build-scripts.
+
+### Key Technical Features
+
+- **Base image**: Ubuntu 24.04 LTS with comprehensive C++ toolchain
+- **Cross-compilation**: aarch64 and Windows (x86_64) support from x86_64 hosts
+- **Wine integration**: For Windows tooling, MSVC and MinGW compilation on Linux
+- **Library management**: Automated packaging/uploading of Qt libraries to Nexus
+- **Entrypoint**: Sophisticated user/permission handling to match host UID/GID
+- **FUSE mounting**: Zip-mounted libraries and toolchains for space efficiency
+
+
+The system enables consistent, reproducible C++ builds across platforms while maintaining developer workflow
+flexibility.
+
+### Python Build Script
+
+The `bin/build.py` script from the [**CMake Library**](https://git.scanframe.com/library/cmake-lib/-/branches) 
+is responsible for automating the build process of C++ projects using CMake.  
+The script provides a bootstrap option for creating a new C++ boilerplate project.
+It provides a convenient interface for developers to execute build commands.  
+The same script can be used for both Linux and Windows, including CI/CD-pipelines.  
+See the Python script in action see the [YouTube](https://www.youtube.com/@Scanframe) channel.
+
+> Good chance the `main` branch is not up to date and use a `dev` or `fix` branch.
+
+### Image Content
+
 To build C++ projects using a Docker image the next Docker configuration is used
 [`Dockerfile`](builder/cpp.Dockerfile "Link to the docker file.").
 
@@ -49,10 +94,10 @@ Applications within the Docker image to C++ projects are:
 * Fuse-ZIP
 * JQ
 * Gcovr
-* Python3
+* Python3 (Linux + Windows)
 * SSH
 * Wine
-* Qt Framework (optional using `--qt-ver '6.9.1'` or leave empty for none.)
+* Qt Framework (optional using `--qt-ver '6.10.1'` or leave empty for none.)
 
 To create the image and upload it to the Sonatype Nexus server's Docker V2 registry, the
 script [cpp-builder.sh](cpp-builder.sh)
@@ -71,53 +116,48 @@ For Linux the order of the steps is:
 	 This step requires the Qt-version zipped library to be uploaded or present on the Nexus shared storage.
 5. Push the image to the Nexus Docker registry  
 	 `./cpp-builder.sh --qt-ver '<qt-ver>' push`.
+6. Push the image to Docker Hub registry  
+	 `./cpp-builder.sh --qt-ver '<qt-ver>' docker-push`.
+6. Make the image get the latest tag on Docker Hub  
+	 `./cpp-builder.sh --qt-ver '<qt-ver>' docker-latest`.
 
 > For the **aarch64** version the same steps are performed on a Raspberry Pi 5 or an **aarch64** image running on an *
 *x86_64** machine using **qemu**.  
 > The **aarch64** image can only build QT targets for **aarch64** as where the **x86_64** one does all 3.
 
-The zip-files are locally stored in the Nexus having the following directory structure:
+The zip-files are locally stored in the Nexus repository having the following directory structure:
 
 ```text
 <file-server>/library/qt/
 ├── lnx-aarch64
 │   ├── 6.8.1
 │   │   └── gcc_64
-│   └── 6.9.1
+│   └── 6.10.1
 │       └── gcc_64
 ├── lnx-x86_64
 │   ├── 6.8.1
 │   │   └── gcc_64
-│   └── 6.9.1
+│   └── 6.10.1
 │       └── gcc_64
 ├── w64-x86_64
 │   ├── 6.8.1
 │   │   └── mingw_64
-│   └── 6.9.1
+│   └── 6.10.1
 │       └── mingw_64
 └── win-x86_64
     ├── 6.8.1
     │   └── mingw_64
-    └── 6.9.1
+    └── 6.10.1
         └── mingw_64
 ```
 
-> The Linux Windows cross-compiler `win-x86_64` version of the Qt-library is created using an `overlayfs` from
-> the native build Windows Qt library but also could be a copy of the native build Windows Qt library located in
-> the `w64-x86_64` directory.
-
-The `win-x86_64` directory is modified for cross compiling for Windows using the script  [
-`qt-cross-windows-fix.sh`](https://github.com/Scanframe/sf-cmake/blob/main/bin/qt-cross-windows-fix.sh).   
-The script makes it so that the required Qt-tools are used from the Linux Qt version.
-That is why the directory structure is as it is.
-
-To create the Qt-version zip-files for the Nexus shared storage the script, the following script commands ar used:
+To create the Qt-version zip-files for the Nexus shared storage, the following script commands ar used:
 > The `--platform` flag is optional and defaults to `amd64` on an `x86_64` machine.
 
 * `./cpp-builder.sh --platform qt-lnx`
 * `./cpp-builder.sh --platform arm64 qt-lnx`
 * `./cpp-builder.sh qt-win`
-* `./cpp-builder.sh qt-w64` (only used for Windows native builds)
+* `./cpp-builder.sh qt-w64`
 
 Upload the created zip-files to the Nexus shared storage.
 
