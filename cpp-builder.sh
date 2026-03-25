@@ -41,6 +41,10 @@ if [[ "${architecture}" == 'aarch64' ]]; then
 	base_img_name='arm64v8/ubuntu'
 	platform='arm64'
 fi
+# Optional timestamp file to make it stop loading compressed files and use the cache.
+timestamp_file="/tmp/docker-import-timestamp.txt"
+# Default is tar+gzip.
+zip_format=false
 
 # Prints the help.
 #
@@ -52,28 +56,30 @@ function show_help {
   Execute an action for docker and/or it's container.
 
   Options:
-    -h, --help     : Show this help.
-    -p, --project  : Project directory which is mounted in '/mnt/project' and has a symlink '~/project'.
-    --base-image   : Defaults to '${base_img_name}' available is also 'arm64v8/ubuntu'.
-    --base-ver     : Version/tag of the base image which defaults to '${base_img_tag}' for base image '${base_img_name}'.
-    --platform     : Platform defaults to '${platform}' available is also 'arm64'.
-    --qt-ver       : Version of the the Qt library to instead of newest one available.
-    -y, --yes      : No questions asked to perform the command.
+    -h, --help      : Show this help.
+    -p, --project   : Project directory which is mounted in '/mnt/project' and has a symlink '~/project'.
+    --base-image    : Defaults to '${base_img_name}' available is also 'arm64v8/ubuntu'.
+    --base-ver      : Version/tag of the base image which defaults to '${base_img_tag}' for base image '${base_img_name}'.
+    --platform      : Platform defaults to '${platform}' available is also 'arm64'.
+    --qt-ver        : Version of the the Qt library to instead of newest one available.
+    --zip           : Compress files using the zip-format, by default is uses tar + gzip.
+    -y, --yes       : No questions asked to perform the command.
 
   Commands:
+    timestamp       : Create or update the timestamp file '${timestamp_file}' to make it fixed so those layers are not recreated.
     build           : Builds the docker image tagged '${img_name}:${img_tag}' for self-hosted Nexus repository and requires zipped Qt libraries.
     push            : Pushes the docker image to the self-hosted Nexus repository.
     pull            : Pulls the docker image from the self-hosted Nexus repository.
     base-pull       : Pulls the base image '${base_img_name}:${base_img_tag}' and tags it for the self-hosted docker registry.
     base-push       : Pulls the base image '${base_img_name}:${base_img_tag}' when not there and pushes it to the self-hosted Nexus docker registry.
-    qt-lnx          : Generates the 'qt-lnx.zip' from the current user's Linux Qt framework/library location.
-    qt-win          : Generates the 'qt-win.zip' from the current user's Cross Windows Qt framework/library location.
-    qt-w64          : Generates the 'qt-w64.zip' from the Windows Qt library relative to the current user's Qt.
-    qt-w64-tools    : Generates the 'qt-tools.zip' from the Windows Qt library relative to the current user's Qt.
-    wine-tools      : Generates the 'win-x86_64-cmake-4.2-combi.zip'.
-    qt-lnx-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-lnx-<architecture>-<qt-ver>.zip'.
-    qt-win-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-win-<architecture>-<qt-ver>.zip'.
-    qt-w64-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-<architecture>-<qt-ver>.zip'.
+    qt-lnx          : Generates the 'qt-lnx.tar.gz' from the current user's Linux Qt framework/library location.
+    qt-win          : Generates the 'qt-win.tar.gz' from the current user's Cross Windows Qt framework/library location.
+    qt-w64          : Generates the 'qt-w64.tar.gz' from the Windows Qt library relative to the current user's Qt.
+    qt-w64-tools    : Generates the 'qt-tools.tar.gz' from the Windows Qt library relative to the current user's Qt.
+    wine-tools      : Generates the 'win-x86_64-cmake-4.2-combi.tar.gz'.
+    qt-lnx-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-lnx-<architecture>-<qt-ver>.tar.gz'.
+    qt-win-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-win-<architecture>-<qt-ver>.tar.gz'.
+    qt-w64-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-<architecture>-<qt-ver>.tar.gz'.
     qt-w64-tools-up : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-tools.zip'.
     wine-tools-up   : Uploads the generated zip-file to the Nexus server'.
     run             : Runs the docker container named '${container_name}' in the foreground mounting without passing the hosts X11 server.
@@ -109,7 +115,7 @@ fi
 
 # Check if the required credential file exists.
 if [[ ! -f "${script_dir}/.nexus-credentials" ]]; then
-	WriteLog "File '${script_dir}/.nexus-credentials' is required!"
+	WriteLog "! File '${script_dir}/.nexus-credentials' is required!"
 	exit 1
 fi
 # Read the credentials from non repository file.
@@ -125,7 +131,7 @@ docker_file="${work_dir}/cpp.Dockerfile"
 cd "${script_dir}" || exit 1
 
 # Parse options.
-temp=$(getopt -o 'hp:y' --long 'help,platform:,base-image:,project:,base-ver:,qt-ver:,yes' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hp:y' --long 'help,platform:,base-image:,project:,base-ver:,qt-ver:,zip,yes' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	show_help
@@ -165,13 +171,19 @@ while true; do
 			# When the platform does not match the default base image modify it.
 			if [[ "${platform}" == 'arm64' && "${base_img_name}" =~ ^amd64 ]]; then
 				base_img_name='arm64v8/ubuntu'
-				WriteLog "Defaulting platform '${platform}' to base image '${base_img_name}'."
+				WriteLog "# Defaulting platform '${platform}' to base image '${base_img_name}'."
 				architecture='aarch64'
 			elif [[ "${platform}" == 'amd64' && "${base_img_name}" =~ ^arm64 ]]; then
 				base_img_name='amd64/ubuntu'
-				WriteLog "Defaulting platform '${platform}' to base image '${base_img_name}'."
+				WriteLog "# Defaulting platform '${platform}' to base image '${base_img_name}'."
 				architecture='x86_64'
 			fi
+			continue
+			;;
+
+		--zip)
+			zip_format=true
+			shift 1
 			continue
 			;;
 
@@ -183,7 +195,7 @@ while true; do
 
 		-p | --project)
 			if [[ ! -d "${2}" ]]; then
-				WriteLog "Project directory '${2}' does not exist!"
+				WriteLog "! Project directory '${2}' does not exist!"
 				exit 1
 			fi
 			project_dir="$(realpath "${2}")"
@@ -203,6 +215,30 @@ while true; do
 	esac
 done
 
+# Determine the used file compression.
+if ${zip_format}; then
+	# File compression with zip.
+	compress_suffix=".zip"
+	compress_exclude="-x"
+	compress_cmd=(zip)
+	! $flag_pause && compress_cmd+=(--quiet)
+	compress_cmd+=(--display-bytes --recurse-paths)
+	# Command storing symlinks.
+	compress_cmd_lnk=("${compress_cmd[@]}" --symlinks)
+else
+	# File compression with tar and gzip.
+	compress_suffix=".tar.gz"
+	compress_exclude="--exclude"
+	compress_cmd_lnk=(tar)
+	$flag_pause && compress_cmd_lnk+=(--verbose)
+	compress_cmd_lnk+=(--owner=0 --group=0)
+	compress_cmd_lnk+=(--create --gzip)
+	compress_cmd=("${compress_cmd_lnk[@]}")
+	compress_cmd_lnk+=(--file)
+	# Command storing symlinks as thew file they point to.
+	compress_cmd+=(--dereference --file)
+fi
+
 # Location for the Qt libraries other then the default.
 if [[ ! -d qt_lib_dir && ! -L qt_lib_dir ]]; then
 	qt_lib_dir_file=".qt-lib-dir"
@@ -221,9 +257,9 @@ if [[ "${qt_ver}" == 'max' ]]; then
 	qt_ver="$(basename "$(find "${qt_lib_dir}/lnx-${architecture}/" -maxdepth 1 -regextype posix-extended \
 		-regex '^.*[0-9]+\.[0-9]+\.[0-9]+$' | sort --reverse --version-sort | head -n 1)")"
 	if [[ -z "${qt_ver}" ]]; then
-		WriteLog "No Qt version directory found in '${qt_lib_dir}/lnx-${architecture}'!"
+		WriteLog "! No Qt version directory found in '${qt_lib_dir}/lnx-${architecture}'!"
 	else
-		WriteLog "Qt version '${qt_ver}' found in directory '${qt_lib_dir}/lnx-${architecture}'!"
+		WriteLog "# Qt version '${qt_ver}' found in directory '${qt_lib_dir}/lnx-${architecture}'."
 	fi
 fi
 
@@ -235,7 +271,10 @@ else
 fi
 
 # Form the Windows 64 toolchain name.
-toolchain="w64-x86_64-mingw-1320-posix"
+w64_toolchains+=()
+w64_toolchains+=("w64-x86_64-mingw-1320-posix")
+w64_toolchains+=("w64-x86_64-msvc-2022")
+w64_toolchains+=("w64-x86_64-msvc-2026")
 
 # Get the subcommand.
 cmd=""
@@ -245,19 +284,20 @@ if [[ $# -gt 0 ]]; then
 fi
 
 if [[ -n "${cmd}" ]]; then
-	WriteLog "
-	Qt version           : ${qt_ver}
-	Targeted Platform    : ${platform}
-	Architecture         : ${architecture}
-	Base image tag       : ${base_img_tag}
-	Base image name      : ${base_img_name}
-	Image tag            : ${img_tag}
-	Image name           : ${img_name}
-	Container name       : ${container_name}
-	Temporary directory  : ${temp_dir}
-	Qt library directory : ${qt_lib_dir}
-	Nexus relative path  : ${raw_lib_offset}
-	Windows toolchain    : ${toolchain}
+	WriteLog "#
+  Qt version           : ${qt_ver}
+  Targeted Platform    : ${platform}
+  Architecture         : ${architecture}
+  Base image tag       : ${base_img_tag}
+  Base image name      : ${base_img_name}
+  Image tag            : ${img_tag}
+  Image name           : ${img_name}
+  Container name       : ${container_name}
+  Temporary directory  : ${temp_dir}
+  Qt library directory : ${qt_lib_dir}
+  Compression Suffix   : ${compress_suffix}
+  Nexus relative path  : ${raw_lib_offset}
+  Windows toolchains   : ${w64_toolchains[*]}
 	"
 	${flag_pause} && read -rp "Continue with command '${cmd}' [y/N]?" && if [[ $REPLY != [yY] ]]; then
 		exit 0
@@ -265,6 +305,11 @@ if [[ -n "${cmd}" ]]; then
 fi
 
 case "${cmd}" in
+
+	timestamp)
+		date +'%FT%T' >"${timestamp_file}"
+		WriteLog "# Timestamp file set to: $(cat "${timestamp_file}")"
+		;;
 
 	build-push)
 		"${0}" --qt-ver '' build
@@ -294,23 +339,25 @@ case "${cmd}" in
 		# Check if the Qt version library directory exists.
 		ver_dir="${qt_lib_dir}/lnx-${architecture}/${qt_ver}"
 		if [[ ! -d "${ver_dir}" ]]; then
-			WriteLog "Qt version directory '${ver_dir}' does not exist!"
+			WriteLog "! Qt version directory '${ver_dir}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/qt-lnx-${architecture}-${qt_ver}.zip"
-		# Remove the current zip file.
+		zip_file="${temp_dir}/qt-lnx-${architecture}-${qt_ver}${compress_suffix}"
+		WriteLog "# Compressing Qt Library to file: ${zip_file}"
+		# Remove the current compressed file.
 		[[ -f "${zip_file}" ]] && rm "${zip_file}"
-		# Change directory in order for zip to store the correct path.
+		# Change directory in order for the compressed to store the correct path.
 		pushd "${qt_lib_dir}/lnx-${architecture}/"
-		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}/gcc_64/"{bin,lib,include,libexec,mkspecs,plugins}
+		"${compress_cmd_lnk[@]}" "${zip_file}" "${qt_ver}/gcc_64/"{bin,lib,include,libexec,mkspecs,plugins}
 		popd
 		ls -lah "${zip_file}"
 		;;
 
 	qt-lnx-up)
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/qt-lnx-${architecture}-${qt_ver}.zip"
+		zip_file="${temp_dir}/qt-lnx-${architecture}-${qt_ver}${compress_suffix}"
+		WriteLog "# Uploading Qt Library compressed file: ${zip_file}"
 		# Upload file Linux Qt library.
 		curl \
 			--progress-bar \
@@ -323,24 +370,27 @@ case "${cmd}" in
 		# Check if the Qt version library directory exists.
 		ver_dir="${qt_lib_dir}/win-${architecture}/${qt_ver}"
 		if [[ ! -d "${ver_dir}" ]]; then
-			WriteLog "Qt version directory '${ver_dir}' does not exist!"
+			WriteLog "! Qt version directory '${ver_dir}' does not exist."
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/qt-win-${architecture}-${qt_ver}.zip"
-		# Remove the current zip file.
+		zip_file="${temp_dir}/qt-win-${architecture}-${qt_ver}${compress_suffix}"
+		WriteLog "# Compressing Qt Library to file: ${zip_file}"
+		# Remove the current compressed file.
 		[[ -f "${zip_file}" ]] && rm "${zip_file}"
-		# Change directory in order for zip to store the correct path.
+		# Change directory in order for compressed file to store the correct path.
 		pushd "${qt_lib_dir}/win-${architecture}/"
-		# Zip all files except Windows executables.
-		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}/mingw_64/"{bin,lib,include,libexec,mkspecs,plugins} -x '*.exe'
+		# Compress all files except Windows executables.
+		"${compress_cmd_lnk[@]}" "${zip_file}" "${qt_ver}/mingw_64/"{bin,lib,include,mkspecs,plugins}
+		# "${compress_exclude}" '*.exe'
 		popd
 		ls -lah "${zip_file}"
 		;;
 
 	qt-win-up)
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/qt-win-${architecture}-${qt_ver}.zip"
+		zip_file="${temp_dir}/qt-win-${architecture}-${qt_ver}${compress_suffix}"
+		WriteLog "# Uploading Qt Library compressed file: ${zip_file}"
 		# Upload file Linux Qt library.
 		curl \
 			--progress-bar \
@@ -357,22 +407,24 @@ case "${cmd}" in
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/qt-w64-${architecture}-${qt_ver}.zip"
-		# Remove the current zip file.
+		zip_file="${temp_dir}/qt-w64-${architecture}-${qt_ver}${compress_suffix}"
+		WriteLog "# Compressing Qt Library to file: ${zip_file}"
+		# Remove the current compressed file.
 		[[ -f "${zip_file}" ]] && rm "${zip_file}"
-		# Change directory in order for zip to store the correct path.
+		# Change directory in order for the compressed file to store the correct path.
 		pushd "${qt_lib_dir}/w64-${architecture}/"
 		# Fix the permissions on exe and dll and other files for Cygwin to make them executable.
 		find . \( -iname "*.dll" -o -iname "*.exe" -o -iname "*.cmd" -o -iname "*.bat" \) -exec chmod +x {} \;
-		# Zip the files of the library.
-		zip --display-bytes --recurse-paths --symlinks "${zip_file}" "${qt_ver}"/{mingw_64,msvc_64}/{bin,lib,include,libexec,mkspecs,plugins}
+		# Compress the library files except 'libexec' since it does not exist for Windows.
+		"${compress_cmd_lnk[@]}" "${zip_file}" "${qt_ver}"/{mingw_64,msvc_64}/{bin,lib,include,mkspecs,plugins}
 		popd
 		ls -lah "${zip_file}"
 		;;
 
 	qt-w64-up)
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/qt-w64-${architecture}-${qt_ver}.zip"
+		zip_file="${temp_dir}/qt-w64-${architecture}-${qt_ver}${compress_suffix}"
+		WriteLog "# Uploading Qt Library compressed file: ${zip_file}"
 		# Upload file Windows Qt library.
 		curl \
 			--progress-bar \
@@ -384,53 +436,62 @@ case "${cmd}" in
 	qt-w64-tools)
 		# Check if the Qt version library directory exists for Windows.
 		qt_tools_dir="${qt_lib_dir}/../toolchain"
-		if [[ ! -d "${qt_tools_dir}/${toolchain}" ]]; then
-			WriteLog "Qt Tools directory '${qt_tools_dir}/${toolchain}' does not exist!"
-			exit 1
-		fi
-		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${toolchain}.zip"
-		# Remove the current zip file.
-		[[ -f "${zip_file}" ]] && rm "${zip_file}"
-		# Change directory in order for zip to store the correct path.
-		pushd "${qt_tools_dir}"
-		# Fix the permissions on exe and dll and other files for Cygwin to make them executable.
-		find . \( -iname "*.dll" -o -iname "*.exe" -o -iname "*.cmd" -o -iname "*.bat" \) -exec chmod +x {} \;
-		WriteLog "Zip Windows MinGW compiler '${toolchain}'."
-		# Zip the GNU compiler version.
-		zip --quiet --display-bytes --recurse-paths --symlinks "${zip_file}" "${toolchain}"
-		popd
-		ls -lah "${zip_file}"
+		for w64_tc in "${w64_toolchains[@]}"; do
+			if [[ ! -d "${qt_tools_dir}/${w64_tc}" ]]; then
+				WriteLog "Qt Tools directory '${qt_tools_dir}/${w64_tc}' does not exist!"
+				exit 1
+			fi
+			# Form the zip-filepath using the found or set Qt version.
+			zip_file="${temp_dir}/${w64_tc}${compress_suffix}"
+			# Remove the current compressed file.
+			[[ -f "${zip_file}" ]] && rm "${zip_file}"
+			# Change directory in order for the compressed file to store the correct path.
+			pushd "${qt_tools_dir}"
+			WriteLog "# Fixing permissions on exe and dll and other files to make them executable in Cygwin."
+			# Fix the permissions on exe and dll and other files for Cygwin to make them executable.
+			find . \( -iname "*.dll" -o -iname "*.exe" -o -iname "*.cmd" -o -iname "*.bat" \) -exec chmod +x {} \;
+			WriteLog "# Compressing Windows toolchain '${w64_tc}'."
+			# Compress the GNU compiler version.
+			"${compress_cmd_lnk[@]}" "${zip_file}" "${w64_tc}"
+			popd
+		done
+		# List the compressed files.
+		for w64_tc in "${w64_toolchains[@]}"; do
+			ls -lah "${temp_dir}/${w64_tc}${compress_suffix}"
+		done
 		;;
 
 	qt-w64-tools-up)
-		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${toolchain}.zip"
-		# Upload file Windows Qt library.
-		curl \
-			--progress-bar \
-			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-			--upload-file "${zip_file}" \
-			"${NEXUS_SERVER_URL}/${raw_lib_offset}/toolchain/"
+		for w64_tc in "${w64_toolchains[@]}"; do
+			# Form the zip-filepath using the found or set Qt version.
+			zip_file="${temp_dir}/${w64_tc}${compress_suffix}"
+			WriteLog "# Uploading Windows toolchain '${w64_tc}' compressed file: ${zip_file}"
+			# Upload file Windows Qt library.
+			curl \
+				--progress-bar \
+				--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+				--upload-file "${zip_file}" \
+				"${NEXUS_SERVER_URL}/${raw_lib_offset}/toolchain/"
+		done
 		;;
 
 	wine-tools)
 		tool_combi="win-x86_64-cmake-4.2-combi"
 		combi_dir="${qt_lib_dir}/../toolchain/${tool_combi}"
 		if [[ ! -d "${combi_dir}" ]]; then
-			WriteLog "Tools directory '${combi_dir}' does not exist!"
+			WriteLog "! Tools directory '${combi_dir}' does not exist!"
 			exit 1
 		fi
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${tool_combi}.zip"
-		# Remove the current zip file.
+		zip_file="${temp_dir}/${tool_combi}${compress_suffix}"
+		# Remove the current compressed file.
 		[[ -f "${zip_file}" ]] && rm "${zip_file}"
-		# Change directory in order for zip to store the correct path.
+		# Change directory in order for the compressed file to store the correct path.
 		pushd "${combi_dir}"
 		# Fix the permissions on exe and dll and other files for Cygwin to make them executable.
-		WriteLog "Zipping Tool Combination '${tool_combi}'."
-		# Zip all symlinked files and directories as if the are actual.
-		zip --quiet --display-bytes --recurse-paths "${zip_file}" ./
+		WriteLog "# Compressing Tool Combination '${tool_combi}'."
+		# Compress all symlinked files and directories as if the are actual.
+		"${compress_cmd[@]}" "${zip_file}" ./
 		popd
 		ls -lah "${zip_file}"
 		;;
@@ -438,8 +499,8 @@ case "${cmd}" in
 	wine-tools-up)
 		tool_combi="win-x86_64-cmake-4.2-combi"
 		# Form the zip-filepath using the found or set Qt version.
-		zip_file="${temp_dir}/${tool_combi}.zip"
-		WriteLog "Tools directory zip file: ${zip_file}"
+		zip_file="${temp_dir}/${tool_combi}${compress_suffix}"
+		WriteLog "# Uploading Wine tool combi compressed file: ${zip_file}"
 		# Upload file Windows Qt library.
 		curl \
 			--progress-bar \
@@ -484,7 +545,7 @@ case "${cmd}" in
 		# Stop all containers using this image.
 		# shellcheck disable=SC2046
 		if [[ -n "$(docker ps -a -q --filter ancestor="${platform}/${img_name}:${img_tag}")" ]]; then
-			WriteLog "Stopping containers using image '${platform}/${img_name}:${img_tag}'."
+			WriteLog "# Stopping containers using image '${platform}/${img_name}:${img_tag}'."
 			docker stop $(docker ps -a -q --filter ancestor="${platform}/${img_name}:${img_tag}")
 		fi
 		build_args=("BASE_IMG=${NEXUS_REPOSITORY}/${base_img_name}:${base_img_tag}")
@@ -492,7 +553,8 @@ case "${cmd}" in
 		build_args+=("NEXUS_SERVER_URL=${NEXUS_SERVER_URL}")
 		build_args+=("NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${raw_lib_offset}")
 		build_args+=("QT_VERSION=${qt_ver}")
-		build_args+=("NEXUS_TIMESTAMP=$(date +'%FT%T')")
+		build_args+=("NEXUS_TIMESTAMP=$(cat "${timestamp_file}" 2>/dev/null || date +'%FT%T')")
+		build_args+=("COMPRESSION_SUFFIX=${compress_suffix}")
 		# Build the image.
 		dckr_cmd=(docker)
 		dckr_cmd+=("${cmd}")
@@ -517,7 +579,7 @@ case "${cmd}" in
 
 	run | runx | start | startx)
 		if [[ -z "${project_dir}" ]]; then
-			WriteLog "Project (option: -p) is required for this command."
+			WriteLog "! Project (option: -p) is required for this command."
 			exit 1
 		fi
 		# Use option '--privileged' instead of '--device' and '--security-opt' when having fuse mounting problems.
@@ -561,10 +623,10 @@ case "${cmd}" in
 		# Stop this docker container only.
 		cntr_id="$(docker ps --filter name="${container_name}" --quiet)"
 		if [[ -n "${cntr_id}" ]]; then
-			WriteLog "Container ID is '${cntr_id}' and performing '${cmd}' command."
+			WriteLog "# Container ID is '${cntr_id}' and performing '${cmd}' command."
 			docker "${cmd}" "${cntr_id}"
 		else
-			WriteLog "Container '${container_name}' is not running."
+			WriteLog "# Container '${container_name}' is not running."
 		fi
 		;;
 
@@ -588,7 +650,7 @@ case "${cmd}" in
 			if "${script_dir}/nexus-docker.sh" "${cmd}"; then
 				exit 0
 			fi
-			WriteLog "Command '${cmd}' is invalid!!!"
+			WriteLog "! Command '${cmd}' is invalid."
 		fi
 		show_help
 		exit 1

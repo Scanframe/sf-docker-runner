@@ -52,9 +52,9 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			WriteLog "Importing registry file '${HOME}/import.reg'."
 			sudo --user=user wine regedit "${HOME}/import.reg" 2>/dev/null
 		fi
-		# Directory of the zipped Wine applications.
+		# Directory of the compressed Wine applications.
 		wine_apps_zip_dir="/opt/wine-apps"
-		# Check if the 'dosdevices' directory is created by 'wineboot' and zipped apps are available.
+		# Check if the 'dosdevices' directory is created by 'wineboot' and compressed apps are available.
 		if [[ -d "${WINEPREFIX}/dosdevices/" && -d "${wine_apps_zip_dir}" ]]; then
 			# Directory to mount them in and to create ad drive 'P:'.
 			base_app_dir="/mnt/drive_p"
@@ -72,7 +72,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 					# Create the application directory for mounting on.
 					if mkdir --parent "${app_dir}" && sudo chown user:user "${app_dir}"; then
 						if ! fuse-zip -o rw,nonempty,allow_other "${zip_file_path}" "${app_dir}"; then
-							WriteLog "Mounting Wine application zip-file '${zip_file}' onto '${app_dir}' failed!"
+							WriteLog "Mounting Wine application compressed file '${zip_file}' onto '${app_dir}' failed!"
 						fi
 					fi
 				done < <(find "${wine_apps_zip_dir}" -maxdepth 1 -type f -name "*.zip")
@@ -87,69 +87,77 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			fi
 		fi
 	fi
-	# Check if the Qt zipped libraries are available.
+
+	# Check if the Qt compressed libraries are available.
 	if [[ -d "/usr/local/lib/qt" ]]; then
-		WriteLog "Qt zipped library is available."
+		WriteLog "Qt compressed library is available."
 		mkdir --parents "${HOME}/lib"
 		ln -s "/usr/local/lib/qt" "${HOME}/lib/qt"
 	else
-		# Keep track the qt version dirs of each mounted zip-file.
+		# Keep track the qt version dirs of each mounted compressed file.
 		declare -A arch_qt_ver_dir
-		# Iterate through all the qt-*.zip files and mount them at the correct places.
-		for zip_file in "${HOME}/qt-"*.zip; do
-			if [[ "$(basename "${zip_file}")" =~ ^qt-((lnx|win|w64)-([a-z_0-9]*))\.zip$ ]]; then
+		# Get all the of the qt library compressed-files.
+		mapfile -d '' zip_files < <(find "${HOME}" -maxdepth 1 -type f \( -name "qt-*.zip" -o -name "qt-*.tar.gz" \) -print0)
+		# Iterate through all the compressed files and mount them at the correct places.
+		for zip_file in "${zip_files[@]}"; do
+			if [[ "$(basename "${zip_file}")" =~ ^qt-((lnx|win|w64)-([a-z_0-9]*))\.(zip|tar.gz)$ ]]; then
 				mount_dir="${HOME}/lib/qt/${BASH_REMATCH[1]}"
 				if mkdir --parent "${mount_dir}"; then
-					if ! fuse-zip -o rw,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
-						WriteLog "Mounting Qt library zip-file '${zip_file}' onto '${mount_dir}' failed!"
+					if ! ratarmount -o ro,allow_other "${zip_file}" "${mount_dir}" >/dev/null; then
+						WriteLog "Mounting Qt library compressed file '${zip_file}' onto '${mount_dir}' failed!"
 					else
 						# shellcheck disable=SC212
 						arch_qt_ver_dir["${BASH_REMATCH[1]}"]="$(find "${mount_dir}" -maxdepth 1 -type d -regex ".*/[0-9]+\.[0-9]+\.[0-9]+$")"
-						WriteLog "Qt zipped '${BASH_REMATCH[2]}' library is mounted on '${mount_dir}'."
+						WriteLog "Qt compressed '${BASH_REMATCH[2]}' library is mounted on '${mount_dir}'."
 					fi
 				fi
 			fi
 		done
+
 		# Fix the Qt build tools in subdir libexec for lnx-x86_64 cross-compiling architecture lnx-aarch64.
 		if [[ -d "${arch_qt_ver_dir['lnx-x86_64']}" && -d "${arch_qt_ver_dir['lnx-aarch64']}" ]]; then
-			mv "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec-original" &&
-				ln -rs "${arch_qt_ver_dir['lnx-x86_64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec"
+			bindfs -o ro,nonempty "${arch_qt_ver_dir['lnx-x86_64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec"
 		fi
+		 # Get the tool-combi file.
+		mapfile -d '' zip_files < <(find "${HOME}" -maxdepth 1 -type f \( -name "tool-combi.zip" -o -name "tool-combi.tar.gz" \) -print0)
 		# Mount the combination of tools.
-		zip_file="${HOME}/tool-combi.zip"
-		if [[ -f "${zip_file}" ]]; then
-			mount_dir="${HOME}/tools"
-			if mkdir --parent "${mount_dir}"; then
-				if ! fuse-zip -o rw,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
-					WriteLog "Mounting tool zip-file '${zip_file}' onto '${mount_dir}' failed!"
+		for zip_file in "${zip_files[@]}"; do
+			if [[ -f "${zip_file}" ]]; then
+				mount_dir="${HOME}/tools"
+				if ! ratarmount -o ro,allow_other "${zip_file}" "${mount_dir}" >/dev/null; then
+					WriteLog "Mounting tool-combi compressed file '${zip_file}' onto '${mount_dir}' failed!"
 				else
-					WriteLog "Zipped tool zip-file '${zip_file}' is mounted on '${mount_dir}'."
-				fi
-			fi
-		fi
-		for zip_file in "${HOME}/toolchain-"*.zip; do
-			if [[ "$(basename "${zip_file}")" =~ ^toolchain-([A-Za-z_0-9\-]*)\.zip$ ]]; then
-				mount_base="${HOME}/toolchain"
-				mount_dir="${mount_base}/${BASH_REMATCH[1]}"
-				if mkdir --parent "${mount_dir}"; then
-					if ! fuse-zip -o rw,nonempty,allow_other "${zip_file}" "${mount_dir}"; then
-						WriteLog "Mounting toolchain zip-file '${zip_file}' onto '${mount_dir}' failed!"
-					else
-						WriteLog "Zipped toolchain zip-file '${zip_file}' is mounted on '${mount_dir}'."
-						# Create backwards compatible directory symlink.
-						ln --symbolic --target-directory="${mount_base}" "${mount_dir}/"*
-					fi
+					WriteLog "Compressed tool-combi compressed file '${zip_file}' is mounted on '${mount_dir}'."
 				fi
 			fi
 		done
+
+		# Get all the of the toolchain compressed-files.
+		mapfile -d '' zip_files < <(find "${HOME}" -maxdepth 1 -type f \( -name "toolchain-*.zip" -o -name "toolchain-*.tar.gz" \) -print0)
+		# Check if toolchain files were found.
+		if [[ "${#zip_files[@]}" -ne 0 ]]; then
+			# No need to create a mount directory ratarmount does it all.
+			if ! ratarmount -o ro,allow_other "${zip_files[@]}" "${HOME}/toolchain" >/dev/null; then
+				WriteLog "Mounting toolchain compressed files onto '${mount_dir}' failed!"
+			else
+				WriteLog "Compressed  toolchain files are mounted on '${mount_dir}'."
+			fi
+		fi
 	fi
 
 	WriteLog "Working directory: $(pwd)"
+	# With this file a ssh session get the variable.
+	mkdir --mode=0775 "${HOME}/.ssh"
+	cat /mnt/project/*/.ssh-environment 2>/dev/null >"${HOME}/.ssh/environment"
+	chmod 600 "${HOME}/.ssh/environment"
 	# Check if the host has the X11 display passed.
 	if [[ -n "${DISPLAY}" && -f "${HOME}/.Xauthority" ]]; then
 		# Create file for profile to import to be used when running sshd.
 		echo "export DISPLAY=${DISPLAY}" >"${HOME}/.display.sh"
+		echo "DISPLAY=${DISPLAY}" >>"${HOME}/.ssh/environment"
 	fi
+	chown user:user -R "${HOME}/.ssh"
+
 	# Prevent any errors when resolving git tags.
 	git config --global --add safe.directory '*'
 	#	cat <<EOD > "${HOME}/.gitconfig"

@@ -18,7 +18,7 @@ SHELL ["/bin/bash", "-c"]
 # Also add 'xvfb' to create a fake X-server to run and install Wine properly.
 # Packge winehq-stable is not yet available for Ubuntu version 24.04 so there is a workaround when it does.
 RUN apt-get update && apt-get --yes upgrade && \
-    apt-get --yes install wget curl zip gpg lsb-release software-properties-common iproute2 iputils-ping binutils openssh-server && \
+    apt-get --yes install wget curl zip gpg lsb-release software-properties-common iproute2 iputils-ping binutils rsync openssh-server && \
     mkdir /run/sshd && \
     add-apt-repository --yes --no-update ppa:git-core/ppa && \
     wget --quiet "https://apt.llvm.org/llvm-snapshot.gpg.key" -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
@@ -82,8 +82,11 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\
 COPY bin/.profile /root/
 COPY build-scripts/*.sh /root/bin/
 
-# Install latest gcovr command using pip in a virtual environement.
-RUN /root/bin/gcovr-install.sh
+# Install latest gcovr and ratarmount command using pip in a virtual environement.
+RUN python3 -m venv /opt/python3_env && \
+    /opt/python3_env/bin/pip install ratarmount gcovr && \
+    ln -fs /opt/python3_env/bin/ratarmount /usr/local/bin/ratarmount && \
+    ln -fs /opt/python3_env/bin/gcovr /usr/local/bin/gcovr
 
 # Qt requires locale UTF8.
 RUN echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen
@@ -162,24 +165,25 @@ ARG PLATFORM="amd64"
 ARG QT_VERSION=""
 # Timestamp to force the Docker steps.
 ARG NEXUS_TIMESTAMP=""
+ARG COMPRESSION_SUFFIX=".zip"
 # Use the arguments to pass the library URL.
 ARG NEXUS_SERVER_URL
 ARG NEXUS_RAW_LIB_URL
 # Get the compressed native Qt library.
 RUN if [[ -n "${QT_VERSION}" ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-lnx-$(uname -m).zip" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-lnx-$(uname -m)${COMPRESSION_SUFFIX}" || exit 1 ; \
     fi
 # Get the compressed Qt cross platform libraries only for the 'x86_64' machines.
 RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-x86_64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-win-x86_64.zip" || exit 1 ; \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-aarch64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-lnx-aarch64.zip" || exit 1 ; \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-w64-x86_64-${QT_VERSION}.zip?${NEXUS_TIMESTAMP}" -qO "qt-w64-x86_64.zip" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-x86_64-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-win-x86_64${COMPRESSION_SUFFIX}" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-aarch64-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-lnx-aarch64${COMPRESSION_SUFFIX}" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-w64-x86_64-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-w64-x86_64${COMPRESSION_SUFFIX}" || exit 1 ; \
     fi
 # Get the tools needed for compiling with MSVC in Wine.
 RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/win-x86_64-cmake-4.2-combi.zip?${NEXUS_TIMESTAMP}" -qO "tool-combi.zip" || exit 1 ; \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-msvc-2022.zip?${NEXUS_TIMESTAMP}" -qO "toolchain-msvc.zip" || exit 1 ; \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-mingw-1320-posix.zip?${NEXUS_TIMESTAMP}" -qO "toolchain-mingw.zip" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/win-x86_64-cmake-4.2-combi${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "tool-combi${COMPRESSION_SUFFIX}" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-msvc-2022${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-msvc${COMPRESSION_SUFFIX}" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-mingw-1320-posix${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-mingw${COMPRESSION_SUFFIX}" || exit 1 ; \
     fi
 
 # Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
@@ -203,7 +207,9 @@ RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
 RUN userdel --remove ubuntu || exit 0
 
 # Allow the initial user to run the sudo command.
-RUN usermod -aG sudo user
+# Allow sshd to set environment variables.
+RUN usermod -aG sudo user ; \
+    echo "PermitUserEnvironment yes" > /etc/ssh/sshd_config.d/permit-env-vars.conf
 
 RUN <<'EOF'
 if [[ "$(uname -m)" == "x86_64" ]]; then
@@ -216,6 +222,9 @@ if [[ "$(uname -m)" == "x86_64" ]]; then
 ' > "${HOME}/import.reg"
 fi
 EOF
+
+# Create sqlite index files for faster mounting of the zip file.
+RUN ratarmount --recreate-index qt-*${COMPRESSION_SUFFIX} tool*${COMPRESSION_SUFFIX} ''  || echo "" ; ls -la
 
 # Make sure the user inside the docker container has the same ID as the user outside
 COPY --chown="user:user" --chmod=755 bin/*.sh "${HOME}/bin/"
