@@ -29,9 +29,9 @@ RUN apt-get update && apt-get --yes upgrade && \
     locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb-mingw-w64-target ccache gdb gdbserver valgrind clang-format chrpath dpkg-dev \
     bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix shfmt pkg-config \
     python3 python3-venv python3-dev python3-pefile python3-pyelftools python3-requests python-is-python3 \
-	libopengl0 libgl1-mesa-dev libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev libunwind-dev \
+    libopengl0 libgl1-mesa-dev libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev libunwind-dev \
     strace exiftool rpm nsis x11-apps xcb libxkbcommon-x11-0 libxcb-xinput0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 \
-    libxcb-keysyms1 libxcb-render-util0 xvfb libpcre2-16-0 && \
+    libxcb-keysyms1 libxcb-render-util0 xvfb libpcre2-16-0 libzstd-dev && \
     apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*
 
 # Install Wine HQ when the machine is of 'x86_64'.
