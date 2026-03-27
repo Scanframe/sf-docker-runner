@@ -31,7 +31,8 @@ RUN apt-get update && apt-get --yes upgrade && \
     python3 python3-venv python3-dev python3-pefile python3-pyelftools python3-requests python-is-python3 \
     libopengl0 libgl1-mesa-dev libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev libunwind-dev \
     strace exiftool rpm nsis x11-apps xcb libxkbcommon-x11-0 libxcb-xinput0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 \
-    libxcb-keysyms1 libxcb-render-util0 xvfb libpcre2-16-0 libzstd-dev && \
+    libxcb-keysyms1 libxcb-render-util0 xvfb libpcre2-16-0 libzstd-dev \
+    libpulse0 pulseaudio-utils libavformat60 libswscale7 libavcodec60 libswresample4 libavutil58 pipewire-audio-client-libraries && \
     apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*
 
 # Install Wine HQ when the machine is of 'x86_64'.

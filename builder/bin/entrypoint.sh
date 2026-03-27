@@ -38,7 +38,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	#chown user:user -R ~user/.wine
 	chown user:user --recursive ~user/bin
 	# Add symlink to project mount when it exists.
-	[[ -d /mnt/project ]] && ln --symbolic /mnt/project ~/project
+	[[ -d /mnt/project && ! -L ~/project ]] && ln --symbolic /mnt/project ~/project
 	# Check if the wine-prefix directory available.
 	if [[ -d "${WINEPREFIX}" ]]; then
 		sudo --user=user mkdir "${HOME}/.wine"
@@ -102,8 +102,17 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		for zip_file in "${zip_files[@]}"; do
 			if [[ "$(basename "${zip_file}")" =~ ^qt-((lnx|win|w64)-([a-z_0-9]*))\.(zip|tar.gz)$ ]]; then
 				mount_dir="${HOME}/lib/qt/${BASH_REMATCH[1]}"
+				mount_cmd=(ratarmount)
+				# Add an overlay directory for the aarch64 file to allow replacing a directory with a symlink for Qt build tools.
+				if [[ "${BASH_REMATCH[1]}" == 'lnx-aarch64' && "$(uname -m)" == "x86_64" ]]; then
+					mount_cmd+=(--write-overlay "/tmp/lib-qt/${BASH_REMATCH[1]}")
+					mount_cmd+=(-o "rw,allow_other")
+				else
+					mount_cmd+=(-o "ro,allow_other")
+				fi
+				mount_cmd+=("${zip_file}" "${mount_dir}")
 				if mkdir --parent "${mount_dir}"; then
-					if ! ratarmount -o ro,allow_other "${zip_file}" "${mount_dir}" >/dev/null; then
+					if ! "${mount_cmd[@]}" >/dev/null; then
 						WriteLog "Mounting Qt library compressed file '${zip_file}' onto '${mount_dir}' failed!"
 					else
 						# shellcheck disable=SC212
@@ -113,10 +122,12 @@ if [[ "$(id -u)" -eq 0 ]]; then
 				fi
 			fi
 		done
-
 		# Fix the Qt build tools in subdir libexec for lnx-x86_64 cross-compiling architecture lnx-aarch64.
 		if [[ -d "${arch_qt_ver_dir['lnx-x86_64']}" && -d "${arch_qt_ver_dir['lnx-aarch64']}" ]]; then
-			bindfs -o ro,nonempty "${arch_qt_ver_dir['lnx-x86_64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec"
+			# Empirical hack to get the 'libexec' symlink on the overlay without complaints.
+			mv "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec-org"
+			ln -s "${arch_qt_ver_dir['lnx-x86_64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec-tmp"
+			mv "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec-tmp" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec"
 		fi
 		 # Get the tool-combi file.
 		mapfile -d '' zip_files < <(find "${HOME}" -maxdepth 1 -type f \( -name "tool-combi.zip" -o -name "tool-combi.tar.gz" \) -print0)
@@ -147,7 +158,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 
 	WriteLog "Working directory: $(pwd)"
 	# With this file a ssh session get the variable.
-	mkdir --mode=0775 "${HOME}/.ssh"
+	mkdir --mode=0775 --parents "${HOME}/.ssh"
 	cat /mnt/project/*/.ssh-environment 2>/dev/null >"${HOME}/.ssh/environment"
 	chmod 600 "${HOME}/.ssh/environment"
 	# Check if the host has the X11 display passed.
