@@ -42,17 +42,29 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libxcb-keysyms1 libxcb-render-util0 xvfb libpcre2-16-0 libzstd-dev \
     libpulse0 pulseaudio-utils libavformat60 libswscale7 libavcodec60 libswresample4 libavutil58 pipewire-audio-client-libraries
 
+# Switch to add 32-bit Wine (i386) support, enabled by default. Disable with: --build-arg WINE32=false
+# Only applies to 'x86_64' machines and adds several hundred MB to the image but sadlyu needed for the MSVC toolchain to run.
+ARG WINE32="true"
+
 # Install Wine HQ when the machine is of 'x86_64'.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     if [[ "$(uname -m)" == 'x86_64' ]]; then \
       wget -q https://dl.winehq.org/wine-builds/winehq.key -O - | gpg --dearmor --output /etc/apt/trusted.gpg.d/winehq.gpg && \
       apt-add-repository --yes --no-update --uri "https://dl.winehq.org/wine-builds/$(lsb_release -is | tr '[:upper:]' '[:lower:]')/" --component main && \
-      dpkg --add-architecture i386 && apt-get --yes update && \
-      ( \
-         apt-get --yes install --simulate winehq-stable && \
-         apt-get --yes install wine32:i386 wine64 winehq-stable || apt-get --yes install wine32:i386 wine64 wine \
-      ) ; \
+      if [[ "${WINE32}" == 'true' ]]; then dpkg --add-architecture i386; fi && \
+      apt-get --yes update && \
+      if [[ "${WINE32}" == 'true' ]]; then \
+        ( \
+          apt-get --yes install --simulate winehq-stable && \
+          apt-get --yes install wine32:i386 wine64 winehq-stable || apt-get --yes install wine32:i386 wine64 wine \
+        ) ; \
+      else \
+        ( \
+          apt-get --yes install --simulate winehq-stable && \
+          apt-get --yes install winehq-stable || apt-get --yes install wine64 wine \
+        ) ; \
+      fi ; \
     fi
 
 # Modfify the the apt sources and list files by adding the architecture.
@@ -60,8 +72,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     if [[ "$(uname -m)" == 'x86_64' ]]; then \
-    sed --in-place --regexp-extended 's/^(deb|deb-src)\s+(http|ftp)/\1 [arch=amd64,i386] \2/' /etc/apt/sources.list.d/*.list; \
-    sed --in-place '/^Types: deb$/a\Architectures: amd64 i386' /etc/apt/sources.list.d/*.sources; \
+    if [[ "${WINE32}" == 'true' ]]; then deb_archs='amd64,i386'; src_archs='amd64 i386'; else deb_archs='amd64'; src_archs='amd64'; fi; \
+    sed --in-place --regexp-extended "s/^(deb|deb-src)\s+(http|ftp)/\1 [arch=${deb_archs}] \2/" /etc/apt/sources.list.d/*.list; \
+    sed --in-place '/^Types: deb$/a\Architectures: '"${src_archs}" /etc/apt/sources.list.d/*.sources; \
     printf "\
 Types: deb\n\
 URIs: http://ports.ubuntu.com/ubuntu-ports\n\
