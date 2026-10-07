@@ -105,7 +105,7 @@ is used to handle it.
 
 For Linux the order of the steps is:
 
-1. Pull the base image from GitHub  
+1. Pull the base image from DockerHub  
 	 `./cpp-builder.sh base-pull`.
 2. Push the base image to the Nexus Docker registry  
 	 `./cpp-builder.sh base-push`.

@@ -29,7 +29,6 @@ dir_file="${run_dir}/.install-dir-$(uname -n)"
 if [[ -f "${dir_file}" ]]; then
 	# Read the first line of the file and strip the newline.
 	lib_base_dir="$(head -n 1 "${dir_file}" | tr -d '\n' | tr -d '\n' | tr -d '\r')"
-	WriteLog "- Library install base directory set to: ${lib_base_dir}"
 else
 	lib_base_dir="$(realpath "${run_dir}/..")"
 fi
@@ -76,6 +75,7 @@ function show_help {
   feat-help : Show all possible features.
   conf-help : Show available configuration options.
   conf      : Configure cmake.
+  targets   : Show all build targets.
   summary   : Show the summary of enabled features.
   check     : Check if the features are set (e.g. 'system_xcb_xinput') and if 'fix' command is to be called.
   fix       : Sets the feature(s) by modifying 'CMakeCache.txt' still not being set using the -feature-???? option.
@@ -93,7 +93,7 @@ Steps to build Qt v${qt_ver} in order are:
 }
 
 # Parse options.
-temp=$(getopt -o 'hc:w' --long 'help,qt-ver:,compiler:,windows:,ignore' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hc:w' --long 'help,qt-ver:,compiler:,windows' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	show_help
@@ -165,6 +165,8 @@ lnx_pkgs+=(libatspi2.0-dev)
 lnx_pkgs+=(libavcodec-dev)
 lnx_pkgs+=(libavformat-dev)
 lnx_pkgs+=(libavutil-dev)
+lnx_pkgs+=(libswresample-dev)
+lnx_pkgs+=(libswscale-dev)
 lnx_pkgs+=(libclang-dev)
 lnx_pkgs+=(libcups2-dev)
 lnx_pkgs+=(libcurl4-openssl-dev)
@@ -232,8 +234,10 @@ lnx_pkgs+=(libsm-dev)
 # Added for aarch64 since aarch64 Ubuntu does not have this apparently.
 lnx_pkgs+=(libpulse-dev)
 lnx_pkgs+=(pipewire)
+lnx_pkgs+=(libpipewire-0.3-dev)
+lnx_pkgs+=(libspa-0.2-dev)
 lnx_pkgs+=(ffmpeg)
-
+lnx_pkgs+=(protobuf-compiler)
 
 # Set some defaults depending on the current OS.
 if [[ "${os_name}" == "Cygwin" ]]; then
@@ -274,6 +278,8 @@ fi
 zip_file_base="${run_dir}/qt-${os_code}-$(uname -m)-${qt_ver}"
 zip_file="${zip_file_base}.zip"
 
+qt_host_path="/mnt/project/lnx-x86_64/${qt_ver}/gcc_64"
+
 # Detect windows using the cygwin 'uname' command.
 if [[ "${os_name}" == "Cygwin" ]]; then
 	# Tools directory for this machine using the specified compiler.
@@ -295,15 +301,16 @@ function report {
 # Library Directory : ${lib_dir}
 # Install Directory : ${install_dir}
 # Zip file          : ${zip_file}
-# Git Command       : ${git_cmd}"
+# Git Command       : ${git_cmd}
+# Qt Host Path      : ${qt_host_path}"
 
 	if [[ "${os_name}" == "Cygwin" ]]; then
 		WriteLog "# Windows Tools File: ${dir_file}"
-		if command -v gcc >/dev/null;then 
+		if command -v gcc >/dev/null; then
 			WriteLog "# GCC Version       : $("gcc" --version | head -n 1 | tr -d '\n' | tr -d '\r')"
 		fi
-		if command -v cl1 >/dev/null; then 
-			WriteLog  "# MSVC Version      : $("cl" 2>&1 | head -n 1 | tr -d '\n' | tr -d '\r')"
+		if command -v cl1 >/dev/null; then
+			WriteLog "# MSVC Version      : $("cl" 2>&1 | head -n 1 | tr -d '\n' | tr -d '\r')"
 		fi
 	fi
 }
@@ -386,9 +393,9 @@ case $1 in
 		;;
 
 	vers)
-		git -C "${repo_dir}" ls-remote --tags 
+		git -C "${repo_dir}" ls-remote --tags
 		;;
-		
+
 	clone)
 		report
 		WriteLog "- Cloning repository from tag 'v${qt_ver}' in '${repo_dir}'".
@@ -404,36 +411,31 @@ case $1 in
 			fi
 		fi
 		;;
-		
-	clone2)
-		WriteLog "For each submodule..."
-		pushd "${repo_dir}" >/dev/null
-		# Set the shallow flag (not sure this does anything).
-		"${git_cmd}" config --file .gitmodules --name-only --get-regexp path$ |
-			sed 's/\.path//' |
-			while read -r name; do
-				git config -f .gitmodules "$name.shallow" true
-			done
-#		# Check out all submodules except the ones ignored.
-#		"${git_cmd}" config --file .gitmodules --get-regexp path$ | sed -r 's/.* //' | while read -r name; do
-#			if InArray "${name}" "${mods_ignore[@]}"; then
-#				WriteLog "# Ignoring submodule: ${name}"
-#			else
-#				WriteLog "~ Initializing submodule (shallow): ${name}"
-#				"${git_cmd}" submodule update --init --depth 1 "${name}"
-#			fi
-#		done
-		popd
-		;;
 
 	update)
 		report
-		WriteLog "- Update repository and submodules..."
+		WriteLog "- Update repository and submodules using the given Qt version."
 		# Update recursively.
 		if [[ "${os_name}" == "Cygwin" ]]; then
-			"${git_cmd}" -C "$(cygpath -w "${repo_dir}")" submodule update --init --recursive
+			# Get all tags.
+			"${git_cmd}" -C "$(cygpath -w "${repo_dir}")" fetch --all --tags
+			# Checkout the version required.
+			"${git_cmd}" -C "$(cygpath -w "${repo_dir}")" checkout "v${qt_ver}"
+			# Initialize the repository.
+			pushd "${repo_dir}" >/dev/null
+			./init-repository.bat -f --branch
+			popd
+			#"${git_cmd}" -C "$(cygpath -w "${repo_dir}")" submodule update --init --recursive
 		else
-			"${git_cmd}" -C "${repo_dir}" submodule update --init --recursive
+			# Get all tags.
+			"${git_cmd}" -C "${repo_dir}" fetch --all --tags
+			# Checkout the version required.
+			"${git_cmd}" -C "${repo_dir}" checkout "v${qt_ver}"
+			# Initialize the repository.
+			pushd "${repo_dir}" >/dev/null
+			./init-repository -f --branch
+			popd
+			#"${git_cmd}" -C "${repo_dir}" submodule update --init --recursive
 		fi
 		;;
 
@@ -573,31 +575,29 @@ EOD
 			conf_cmd+=(-ccache)
 			conf_cmd+=(-feature-ccache)
 			conf_cmd+=(-prefix "${install_dir}")
-			if ! ${flag_cross}; then
-				conf_cmd+=(-qpa xcb)
-				conf_cmd+=(-platform linux-g++)
-				conf_cmd+=(-no-feature-wayland-compositor-quick)
-				# Next option need some additional packages installed.
-				#conf_cmd+=(-qpa wayland)
-			fi
 		fi
 
 		# This should change cache variable 'FEATURE_system_xcb_xinput` to be ON.
-		conf_cmd+=(-system-xcb -bundled-xcb-xinput no)
+		#conf_cmd+=(-system-xcb)
+		#conf_cmd+=(-bundled-xcb-xinput no)
 		#
 		conf_cmd+=(-release)
 		#conf_cmd+=(-force-debug-info)
 		conf_cmd+=(-opensource)
 		conf_cmd+=(-confirm-license)
-		conf_cmd+=(-make libs)
-		conf_cmd+=(-make tools)
 		conf_cmd+=(-nomake examples)
 		conf_cmd+=(-nomake tests)
+		conf_cmd+=(-nomake benchmarks)
+
+		if [[ "${os_name}" != "Cygwin" ]]; then
+			echo "==="
+#			conf_cmd+=(-make libs)
+#			conf_cmd+=(-make tools)
+		fi
 		conf_cmd+=(-feature-designer)
 		conf_cmd+=(-skip qtcharts)
 		conf_cmd+=(-skip qtdoc)
 		conf_cmd+=(-skip qtgraphs)
-		#conf_cmd+=(-skip qtmultimedia)
 		conf_cmd+=(-skip qtquick)
 		conf_cmd+=(-skip qtquick3d)
 		conf_cmd+=(-skip qtquick3dphysics)
@@ -605,18 +605,20 @@ EOD
 		conf_cmd+=(-skip qtquickcontrols2)
 		conf_cmd+=(-skip qtquickeffectmaker)
 		conf_cmd+=(-skip qtquicktimeline)
-		#conf_cmd+=(-skip qtshadertools)
+		conf_cmd+=(-skip qtpositioning)
 		conf_cmd+=(-skip qttranslations)
 		conf_cmd+=(-skip qtwebchannel)
 		conf_cmd+=(-skip qtwebengine)
 		conf_cmd+=(-skip qtwebview)
-		conf_cmd+=(-skip qtdeclarative)
-		#conf_cmd+=(-skip qtspeech)
+		#conf_cmd+=(-skip qtdeclarative)
 		conf_cmd+=(-skip qtlocation)
 		conf_cmd+=(-skip qtlottie)
-		conf_cmd+=(-skip qtmqtt)
 		conf_cmd+=(-skip qtopcua)
 		conf_cmd+=(-skip qtvirtualkeyboard)
+		#conf_cmd+=(-skip qtmqtt)
+		#conf_cmd+=(-skip qtmultimedia)
+		#conf_cmd+=(-skip qtshadertools)
+		#conf_cmd+=(-skip qtspeech)
 		if ${flag_cross}; then
 			conf_cmd+=(-skip qtactiveqt)
 		fi
@@ -624,11 +626,33 @@ EOD
 		conf_cmd+=(-no-feature-qdoc)
 		conf_cmd+=(-no-feature-clang)
 		#conf_cmd+=(-qt3d-assimp)
+		if ! ${flag_cross}; then
+			if [[ "${os_name}" != "Cygwin" ]]; then
+				conf_cmd+=(-platform linux-g++)
+				conf_cmd+=(-qpa xcb)
+				conf_cmd+=(-qpa wayland)
+				conf_cmd+=(-no-feature-wayland-compositor-quick)
+				conf_cmd+=(-feature-wayland-client)
+				conf_cmd+=(-feature-pipewire)
+				# Pulse or also both are not possible.
+				if true; then
+					#conf_cmd+=(-pulseaudio)
+					conf_cmd+=(-feature-pulseaudio)
+					conf_cmd+=(-no-feature-alsa)
+				else
+					#conf_cmd+=(-alsa)
+					conf_cmd+=(-feature-alsa)
+					conf_cmd+=(-no-feature-pulseaudio)
+				fi
+				#conf_cmd+=(-gstreamer)
+			fi
+		fi
+
 		# Execute the configuration command.
 		if ${flag_cross}; then
 			conf_cmd+=("--")
 			conf_cmd+=(-DCMAKE_TOOLCHAIN_FILE="${build_dir}/toolchain.cmake")
-			conf_cmd+=(-DQT_HOST_PATH="/mnt/project/lnx-x86_64/${qt_ver}/gcc_64")
+			conf_cmd+=(-DQT_HOST_PATH="${qt_host_path}")
 		fi
 		# Execute the configuration command.
 		"${conf_cmd[@]}"
@@ -641,7 +665,8 @@ EOD
 
 	ccmake)
 		if [[ "${os_name}" == "Cygwin" ]]; then
-			WriteLog "There is no console version in Windows of application 'ccmake'."
+			#WriteLog "There is no console version in Windows of application 'ccmake'."
+			cmake-gui -S "$(cygpath -w "${repo_dir}")/" -B "$(cygpath -w "${build_dir}")"
 		else
 			ccmake "${build_dir}"
 		fi
@@ -658,7 +683,7 @@ EOD
 	targets)
 		report
 		pushd "${build_dir}" >/dev/null
-		cmake --build . --target help | less
+		cmake --build . --target help
 		popd >/dev/null
 		;;
 

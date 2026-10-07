@@ -76,12 +76,14 @@ function show_help {
     qt-win          : Generates the 'qt-win.tar.gz' from the current user's Cross Windows Qt framework/library location.
     qt-w64          : Generates the 'qt-w64.tar.gz' from the Windows Qt library relative to the current user's Qt.
     qt-w64-tools    : Generates the 'qt-tools.tar.gz' from the Windows Qt library relative to the current user's Qt.
-    wine-tools      : Generates the 'win-x86_64-cmake-4.2-combi.tar.gz'.
+    win-tools       : Generates the 'win-x86_64-combi.tar.gz'.
+    lnx-tools       : Generates the 'lnx-<architecture>-combi.tar.gz'.
     qt-lnx-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-lnx-<architecture>-<qt-ver>.tar.gz'.
     qt-win-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-win-<architecture>-<qt-ver>.tar.gz'.
     qt-w64-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-<architecture>-<qt-ver>.tar.gz'.
     qt-w64-tools-up : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-tools.zip'.
-    wine-tools-up   : Uploads the generated zip-file to the Nexus server'.
+    win-tools-up    : Uploads the generated zip-file to the Nexus server'.
+    lnx-tools-up    : Uploads the generated zip-file to the Nexus server'.
     run             : Runs the docker container named '${container_name}' in the foreground mounting without passing the hosts X11 server.
     runx            : Same as 'run' passing the hosts X11 server.
     stop            : Stops the container named '${container_name}' running in the background.
@@ -271,7 +273,7 @@ else
 fi
 
 # Form the Windows 64 toolchain name.
-w64_toolchains+=()
+w64_toolchains=()
 w64_toolchains+=("w64-x86_64-mingw-1320-posix")
 w64_toolchains+=("w64-x86_64-msvc-2022")
 w64_toolchains+=("w64-x86_64-msvc-2026")
@@ -475,8 +477,8 @@ case "${cmd}" in
 		done
 		;;
 
-	wine-tools)
-		tool_combi="win-x86_64-cmake-4.2-combi"
+	win-tools)
+		tool_combi="win-${architecture}-combi"
 		combi_dir="${qt_lib_dir}/../toolchain/${tool_combi}"
 		if [[ ! -d "${combi_dir}" ]]; then
 			WriteLog "! Tools directory '${combi_dir}' does not exist!"
@@ -496,8 +498,42 @@ case "${cmd}" in
 		ls -lah "${zip_file}"
 		;;
 
-	wine-tools-up)
-		tool_combi="win-x86_64-cmake-4.2-combi"
+	win-tools-up)
+		tool_combi="win-${architecture}-combi"
+		# Form the zip-filepath using the found or set Qt version.
+		zip_file="${temp_dir}/${tool_combi}${compress_suffix}"
+		WriteLog "# Uploading Wine tool combi compressed file: ${zip_file}"
+		# Upload file Windows Qt library.
+		curl \
+			--progress-bar \
+			--user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+			--upload-file "${zip_file}" \
+			"${NEXUS_SERVER_URL}/${raw_lib_offset}/toolchain/"
+		;;
+
+	lnx-tools)
+		tool_combi="lnx-${architecture}-combi"
+		combi_dir="${qt_lib_dir}/../toolchain"
+		if [[ ! -d "${combi_dir}" ]]; then
+			WriteLog "! Tools directory '${combi_dir}' does not exist!"
+			exit 1
+		fi
+		# Form the zip-filepath using the found or set Qt version.
+		zip_file="${temp_dir}/${tool_combi}${compress_suffix}"
+		# Remove the current compressed file.
+		[[ -f "${zip_file}" ]] && rm "${zip_file}"
+		# Change directory in order for the compressed file to store the correct path.
+		pushd "${combi_dir}"
+		# Fix the permissions on exe and dll and other files for Cygwin to make them executable.
+		WriteLog "# Compressing Tool Combination '${tool_combi}'."
+		# Compress all symlinked files and directories as if the are actual.
+		"${compress_cmd[@]}" "${zip_file}" "./${tool_combi}"
+		popd
+		ls -lah "${zip_file}"
+		;;
+
+	lnx-tools-up)
+		tool_combi="lnx-${architecture}-combi"
 		# Form the zip-filepath using the found or set Qt version.
 		zip_file="${temp_dir}/${tool_combi}${compress_suffix}"
 		WriteLog "# Uploading Wine tool combi compressed file: ${zip_file}"
@@ -607,7 +643,9 @@ case "${cmd}" in
 			dckr_cmd+=(--env DISPLAY)
 			dckr_cmd+=(--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro")
 		fi
-		#dckr_cmd+=(--volume "${work_dir}/bin:/usr/local/bin/test:ro")
+		if [[ -d "${HOME}/tmp/qt-lnx" ]]; then
+			dckr_cmd+=(--volume "${HOME}/tmp/qt-lnx:/tmp/qt-lnx:rw")
+		fi
 		dckr_cmd+=(--volume "${project_dir}:/mnt/project:rw")
 		dckr_cmd+=(--volume "${script_dir}:/mnt/script:ro")
 		dckr_cmd+=(--workdir "/mnt/project/")

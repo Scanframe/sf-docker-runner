@@ -1,25 +1,28 @@
 ```plantuml
 @startuml
-title = C++ Build Docker Images Process\nWith and Without Qt Libraries;
 
-skinparam activity {
-	StartColor #4C9AFF
-	EndColor #4C9AFF
-	BackgroundColor #F7F9FC
-	BorderColor #5E6C84
-}
-skinparam partition {
-	BackgroundColor #FFFFFF
-	BorderColor #A5ADBA
-}
+'!theme spacelab
+!theme sandstone
+
+
+skinparam noteFontColor grey
 skinparam noteBackgroundColor #FFF8E1
 skinparam noteBorderColor #FFAB00
 
 
+header
+<font color=grey>Scanframe Docker CI/CD</font>
+endheader
+
+footer
+<font color=grey>C++ Builder Process - %date("yyyy-MM-dd")</font>
+endfooter
+
+title "=== C++ Build Docker Images Process\nWith and Without Qt Libraries"
+
 start
 := Create C++ Builder images
-using [[https://git.scanframe.com/docker/gitlab-runner/-/blob/main/cpp-builder.sh cpp-builder.sh]] script
-//(Optionally for building Qt applications)//;
+using [[https://git.scanframe.com/docker/gitlab-runner/-/blob/main/cpp-builder.sh cpp-builder.sh]] script;
 
 
 partition "= Base Image\n//(Secure in private registry)//" {
@@ -49,46 +52,42 @@ partition "= C++ Builder Image\n//(For building the Qt framework)//" {
 
 partition "= Prepare Qt Libraries\n//(Artifacts in Private Storage)//" {
 	fork
-		partition "== Linux Qt\n//(containerized)//" {
-			:Start container from\nnon‑Qt builder\nper architecture;
-			:Run Qt library\nbuild [[https://git.scanframe.com/docker/gitlab-runner/-/blob/main/build-qt-lib.sh script]] commands;
-			note right
-			A subprocess
-			end note
+		partition "=== Linux Native\n//(containerized)//\nlnx-x86_64, lnx-aarch64\ngnu_64" {
+			:Start container from\nnon‑Qt builder per architecture;
+			:Run [[https://git.scanframe.com/docker/gitlab-runner/-/blob/main/build-qt-lib.sh build-qt-lib.sh]]\nto build native libraries;
 		}
 	fork again
-		partition "== Windows Qt\n//(native, no Docker)//" {
+		partition "=== Linux Cross-Compile\n//(containerized)//\nwin-x86_64\nmingw_64" {
+			:Start container from\nnon‑Qt builder (amd64);
+			:Run [[https://git.scanframe.com/docker/gitlab-runner/-/blob/main/build-qt-lib.sh build-qt-lib.sh]]\nwith **--windows**;
+		}
+	fork again
+		partition "=== Windows Native\n//(native)//\nw64-x86_64\nmingw_64, msvc_64" {
 			:Install [[https://git.scanframe.com/shared/bin-bash Cygwin and Scripts]];
-			:Install [[https://download.qt.io/development_releases/prebuilt/mingw_64/ GNU posix-seh ]]\ntoolchain;
-			:Run Qt library\nbuild [[https://git.scanframe.com/docker/gitlab-runner/-/blob/main/build-qt-lib.sh script]] commands;
-			note right
-			A subprocess
-			end note
+			:Install MinGW and/or MSVC toolchains;
+			:Run [[https://git.scanframe.com/docker/gitlab-runner/-/blob/main/build-qt-lib.sh build-qt-lib.sh]]\nfor native Windows builds;
 		}
 	end fork
-	:Create Linux Qt Windows cross compile libraries\n[[https://git.scanframe.com/library/cmake-lib/-/blob/main/bin/qt-cross-windows-fix.sh Cross Windows Fix Script]];
-	note right
-	4 Qt framework OS/architecture
-	directories are readied.
-	===============================
-	# Linux amd64: **lnx-x86_64**
-	# Linux arm64: **lnx-aarch64**
-	# Windows amd64: **w64-x86_64**
-	# Cross Windows amd64: **win-x86_64**
-	end note
+
 	:Upload Qt libraries to [[https://nexus.scanframe.com/#browse/browse:shared:library%2Fqt Nexus]] private storage;
+	note right
+	* library/qt/lnx-aarch64/<ver>/gcc_64
+	* library/qt/lnx-x86_64/<ver>/gcc_64
+	* library/qt/w64-x86_64/<ver>/(mingw_64, msvc_64)
+	* library/qt/win-x86_64/<ver>/mingw_64
+	end note
 }
 
-partition "=C++ Qt Builder Images\n//(containerized)//" {
+partition "= C++ Qt Builder Images\n//(containerized)//" {
 	:Build Qt-enabled image(s) per arch from non‑Qt base;
-	:Fetch Qt zips from private storage
-	([[https://nexus.scanframe.com/#browse/browse:shared:library%2Fqt lnx-x86_64, lnx-aarch64, win-x86_64]])
-	and are mounted as [[https://linux.die.net/man/1/fuse-zip filesystem]];
+	:Fetch Qt compressed files from [[https://nexus.scanframe.com/#browse/browse:shared:library%2Fqt private storage]]
+	 //(lnx-x86_64, lnx-aarch64, win-x86_64, w64-x86_64)//	 ;
+
 	:Push Qt C++ Builder image(s) to the [[https://nexus.scanframe.com/#browse/browse:docker-image:v2%2Famd64%2Fgnu-cpp%2Ftags private registry]];
 }
 
 partition "= Mirror/Publish\n//Docker Hub//" {
-	note right
+	note left
 		Optional
 	end note
 	:Login to Docker Hub (CI secret);

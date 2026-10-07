@@ -13,11 +13,18 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Use '/bin/bash' instead of default '/bin/sh'.
 SHELL ["/bin/bash", "-c"]
 
+# Make the cache
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+
 # Make sure image is up-to-date
 # Install wine 64-bit only and Wine HQ to get Wine version 9.0 eventually.
 # Also add 'xvfb' to create a fake X-server to run and install Wine properly.
 # Packge winehq-stable is not yet available for Ubuntu version 24.04 so there is a workaround when it does.
-RUN apt-get update && apt-get --yes upgrade && \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=bind,source=.,target=/tmp/build-dir \
+    apt-get update && apt-get --yes upgrade --no-install-recommends && \
     apt-get --yes install wget curl zip gpg lsb-release software-properties-common iproute2 iputils-ping binutils rsync openssh-server && \
     mkdir /run/sshd && \
     add-apt-repository --yes --no-update ppa:git-core/ppa && \
@@ -25,32 +32,34 @@ RUN apt-get update && apt-get --yes upgrade && \
     apt-add-repository --yes --no-update "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc) main" && \
     wget --quiet -O - "https://apt.kitware.com/keys/kitware-archive-latest.asc" | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
     apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" && \
+    (apt-get --yes install clang-format || apt-get --yes install /tmp/build-dir/debian-pkgs/clang-format-24.deb) && \
     apt-get --yes install \
-    locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb-mingw-w64-target ccache gdb gdbserver valgrind clang-format chrpath dpkg-dev \
-    bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix shfmt pkg-config \
+    locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb-mingw-w64-target ccache gdb gdbserver valgrind chrpath dpkg-dev \
+    patchelf bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix shfmt pkg-config \
     python3 python3-venv python3-dev python3-pefile python3-pyelftools python3-requests python-is-python3 \
-    libopengl0 libgl1-mesa-dev libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev libunwind-dev \
+    libopengl0 libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev libunwind-dev \
     strace exiftool rpm nsis x11-apps xcb libxkbcommon-x11-0 libxcb-xinput0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 \
     libxcb-keysyms1 libxcb-render-util0 xvfb libpcre2-16-0 libzstd-dev \
-    libpulse0 pulseaudio-utils libavformat60 libswscale7 libavcodec60 libswresample4 libavutil58 pipewire-audio-client-libraries && \
-    apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*
+    libpulse0 pulseaudio-utils libavformat60 libswscale7 libavcodec60 libswresample4 libavutil58 pipewire-audio-client-libraries
 
 # Install Wine HQ when the machine is of 'x86_64'.
-RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
-      apt-get update && \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    if [[ "$(uname -m)" == 'x86_64' ]]; then \
       wget -q https://dl.winehq.org/wine-builds/winehq.key -O - | gpg --dearmor --output /etc/apt/trusted.gpg.d/winehq.gpg && \
-      apt-add-repository --uri "https://dl.winehq.org/wine-builds/$(lsb_release -is | tr '[:upper:]' '[:lower:]')/" --component main && \
+      apt-add-repository --yes --no-update --uri "https://dl.winehq.org/wine-builds/$(lsb_release -is | tr '[:upper:]' '[:lower:]')/" --component main && \
       dpkg --add-architecture i386 && apt-get --yes update && \
       ( \
          apt-get --yes install --simulate winehq-stable && \
          apt-get --yes install wine32:i386 wine64 winehq-stable || apt-get --yes install wine32:i386 wine64 wine \
-      ) && \
-      apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/* ; \
+      ) ; \
     fi
 
 # Modfify the the apt sources and list files by adding the architecture.
 # Also create sources file for arm64 cross-compile needed Qt packages.
-RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    if [[ "$(uname -m)" == 'x86_64' ]]; then \
     sed --in-place --regexp-extended 's/^(deb|deb-src)\s+(http|ftp)/\1 [arch=amd64,i386] \2/' /etc/apt/sources.list.d/*.list; \
     sed --in-place '/^Types: deb$/a\Architectures: amd64 i386' /etc/apt/sources.list.d/*.sources; \
     printf "\
@@ -75,8 +84,8 @@ Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\
     libgles-dev:arm64 libegl-dev:arm64 libgl-dev:arm64 libpcre2-16-0:arm64 libglvnd-dev:arm64 libpng16-16t64:arm64 \
     xcb:arm64 libxkbcommon-x11-0:arm64 libxcb-xinput0:arm64 libxcb-cursor0:arm64 libxcb-shape0:arm64 libpulse0:arm64 \
     libxcb-icccm4:arm64 libxcb-image0:arm64 libxcb-keysyms1:arm64 libxcb-render-util0:arm64 libdbus-1-3:arm64 \
-    libcairo-gobject2:arm64 qemu-user-static:amd64 libxkbcommon-dev:arm64 libxkbfile-dev:arm64 libglu1-mesa-dev:arm64; \
-    apt-get --yes autoremove --purge && apt-get --yes clean && rm -rf /var/lib/apt/lists/*; \
+    libcairo-gobject2:arm64 qemu-user-static:amd64 libxkbcommon-dev:arm64 libxkbfile-dev:arm64 libglu1-mesa-dev:arm64 \
+    libavformat60:arm64 libxrandr2:arm64; \
     fi
 
 # Copy some needed scripts to the root bin directory.
@@ -84,7 +93,8 @@ COPY bin/.profile /root/
 COPY build-scripts/*.sh /root/bin/
 
 # Install latest gcovr and ratarmount command using pip in a virtual environement.
-RUN python3 -m venv /opt/python3_env && \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m venv /opt/python3_env && \
     /opt/python3_env/bin/pip install ratarmount gcovr && \
     ln -fs /opt/python3_env/bin/ratarmount /usr/local/bin/ratarmount && \
     ln -fs /opt/python3_env/bin/gcovr /usr/local/bin/gcovr
@@ -154,11 +164,23 @@ umask 022\n\
 export LS_OPTIONS='--color=auto' WINEDLLOVERRIDES='mscoree=d'\n\
 alias la='ls \$LS_OPTIONS -A'\n\
 alias ll='ls \$LS_OPTIONS -alF'\n\
-alias l='ls $\LS_OPTIONS -CF'\n\
+alias l='ls \$LS_OPTIONS -CF'\n\
 " > "${HOME}/.bashrc"
 
 # Allow fuse by others.
 RUN sed -i -e 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
+
+# Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
+# Remove wine temporary directories '/tmp/wine-*' at the end to allow running as a different.
+# TODO: Maybe use command "winecfg /v win10" sets the Windows version for this wine instance but does not use a GUI at all.
+ENV WINEPREFIX="/opt/wine-prefix"
+# Install Wine only on 'x86_64' machines.
+RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
+      (Xvfb :10 -screen 0 1024x768x24 &) && \
+      sudo mkdir "${WINEPREFIX}" && sudo chown user:user "${WINEPREFIX}" && \
+      sudo --user=user WINEPREFIX="${WINEPREFIX}" WINEDLLOVERRIDES="mscoree=d" DISPLAY=:10 wineboot && \
+      rm -rf /tmp/wine-* ; \
+    fi
 
 # Platform building for.
 ARG PLATFORM="amd64"
@@ -180,23 +202,16 @@ RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then \
       wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-aarch64-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-lnx-aarch64${COMPRESSION_SUFFIX}" || exit 1 ; \
       wget "${NEXUS_RAW_LIB_URL}/qt/qt-w64-x86_64-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-w64-x86_64${COMPRESSION_SUFFIX}" || exit 1 ; \
     fi
-# Get the tools needed for compiling with MSVC in Wine.
+# Get the tools needed for compiling with MSVC in Wine and build AppImage files on a x86_64 host.
 RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/win-x86_64-cmake-4.2-combi${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "tool-combi${COMPRESSION_SUFFIX}" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/lnx-x86_64-combi${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-combi${COMPRESSION_SUFFIX}" || exit 1 ; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/win-x86_64-combi${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "tool-combi${COMPRESSION_SUFFIX}" || exit 1 ; \
       wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-msvc-2022${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-msvc${COMPRESSION_SUFFIX}" || exit 1 ; \
       wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-mingw-1320-posix${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-mingw${COMPRESSION_SUFFIX}" || exit 1 ; \
     fi
-
-# Make Wine configure itself using a different prefix to install and mount later as '~/.wine'.
-# Remove wine temporary directories '/tmp/wine-*' at the end to allow running as a different.
-# TODO: Maybe use command "winecfg /v win10" sets the Windows version for this wine instance but does not use a GUI at all.
-ENV WINEPREFIX="/opt/wine-prefix"
-# Install Wine only on 'x86_64' machines.
-RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
-      (Xvfb :10 -screen 0 1024x768x24 &) && \
-      sudo mkdir "${WINEPREFIX}" && sudo chown user:user "${WINEPREFIX}" && \
-      sudo --user=user WINEPREFIX="${WINEPREFIX}" WINEDLLOVERRIDES="mscoree=d" DISPLAY=:10 wineboot && \
-      rm -rf /tmp/wine-* ; \
+# Get the tools needed for build AppImage files on a aarch64 host.
+RUN if [[ "$(uname -m)" == 'aarch64' ]]; then \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/lnx-aarch64-combi${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-combi${COMPRESSION_SUFFIX}" || exit 1;\
     fi
 
 # Copy the Windows registry files as a fix since no registry files are created during the build.
@@ -231,5 +246,4 @@ RUN ratarmount --recreate-index qt-*${COMPRESSION_SUFFIX} tool*${COMPRESSION_SUF
 COPY --chown="user:user" --chmod=755 bin/*.sh "${HOME}/bin/"
 
 # Create the entry point.
-RUN chmod 755 "${HOME}/bin/entrypoint.sh"
 ENTRYPOINT ["/home/user/bin/entrypoint.sh"]
