@@ -17,7 +17,9 @@ base_img_name="amd64/ubuntu"
 # Default platform for this.
 platform="amd64"
 # The image tag for displaying in help for now.
-img_tag="${base_img_tag}-<qt-ver>"
+img_tag="${base_img_tag}-<qt-ver>[-<revision>]"
+# Release addition for the total tag.
+img_revision=""
 # Set the image name to be used.
 img_name="gnu-cpp"
 # Set container name to be used.
@@ -64,6 +66,7 @@ function show_help {
     --qt-ver        : Version of the the Qt library to instead of newest one available.
     --zip           : Compress files using the zip-format, by default is uses tar + gzip.
     -y, --yes       : No questions asked to perform the command.
+    --revision       : Image release adds a revision part to the image tag.
 
   Commands:
     timestamp       : Create or update the timestamp file '${timestamp_file}' to make it fixed so those layers are not recreated.
@@ -133,7 +136,7 @@ docker_file="${work_dir}/cpp.Dockerfile"
 cd "${script_dir}" || exit 1
 
 # Parse options.
-temp=$(getopt -o 'hp:y' --long 'help,platform:,base-image:,project:,base-ver:,qt-ver:,zip,yes' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hp:y' --long 'help,platform:,base-image:,project:,base-ver:,qt-ver:,revision:,zip,yes' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	show_help
@@ -163,6 +166,12 @@ while true; do
 
 		--base-ver)
 			base_img_tag="${2}"
+			shift 2
+			continue
+			;;
+
+		--revision)
+			img_revision="${2}"
 			shift 2
 			continue
 			;;
@@ -272,11 +281,20 @@ else
 	img_tag="${base_img_tag}"
 fi
 
+# Add th revision to the image tag.
+if [[ -n "${img_revision}" ]]; then
+	img_tag="${img_tag}-${img_revision}"
+fi
+
 # Form the Windows 64 toolchain name.
 w64_toolchains=()
 w64_toolchains+=("w64-x86_64-mingw-1320-posix")
 w64_toolchains+=("w64-x86_64-msvc-2022")
 w64_toolchains+=("w64-x86_64-msvc-2026")
+
+
+timestamp="$(cat "${timestamp_file}" 2>/dev/null || date +'%FT%T')"
+
 
 # Get the subcommand.
 cmd=""
@@ -299,6 +317,7 @@ if [[ -n "${cmd}" ]]; then
   Qt library directory : ${qt_lib_dir}
   Compression Suffix   : ${compress_suffix}
   Nexus relative path  : ${raw_lib_offset}
+  Nexus timestamp      : ${timestamp}
   Windows toolchains   : ${w64_toolchains[*]}
 	"
 	${flag_pause} && read -rp "Continue with command '${cmd}' [y/N]?" && if [[ $REPLY != [yY] ]]; then
@@ -589,7 +608,7 @@ case "${cmd}" in
 		build_args+=("NEXUS_SERVER_URL=${NEXUS_SERVER_URL}")
 		build_args+=("NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${raw_lib_offset}")
 		build_args+=("QT_VERSION=${qt_ver}")
-		build_args+=("NEXUS_TIMESTAMP=$(cat "${timestamp_file}" 2>/dev/null || date +'%FT%T')")
+		build_args+=("NEXUS_TIMESTAMP=${timestamp}")
 		build_args+=("COMPRESSION_SUFFIX=${compress_suffix}")
 		# Build the image.
 		dckr_cmd=(docker)
