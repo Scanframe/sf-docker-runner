@@ -7,10 +7,11 @@
 .minio-credentials
 .install-dir-*
 .qt-lib-dir
-.win-app-dir
 gitlab-runner/config/config.toml
 gitlab-runner/config/.runner_system_id
 minio/data
 minio/config/*
 /qt-build
 /lib/*
+/test-*
+/qt-lnx

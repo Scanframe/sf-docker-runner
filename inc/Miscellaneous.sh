@@ -442,14 +442,6 @@ GetEnvironmentFromFile() {
 		# Trim leading/trailing whitespace, uses extended globbing for trimming
 		local line="${line#"${line%%[![:space:]]*}"}"
 		line="${line%"${line##*[![:space:]]}"}"
-		# Check for only the path in the first line.
-		if [[ "${counter}" -eq 1 && "${line:0:1}" != "#" ]]; then
-			# Convert the path to a cygwin one.
-			[[ "$(uname -o)" == "Cygwin" ]] && line="$(cygpath -u "${line}")"
-			PATH="${line}:${PATH}"
-			export PATH
-			break
-		fi
 		# Ignore empty lines and lines starting with '#'.
 		if [[ -z "${line}" || "${line}" == "#"* ]]; then
 			continue

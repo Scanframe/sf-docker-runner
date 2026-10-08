@@ -2,18 +2,18 @@
 
 ## Introduction
 
-The shell script [`build-qt-lib.sh`](build-qt-lib.sh) is for building the framework libraries
+The shell script [`build-qt-lib.sh`](../build-qt-lib.sh) is for building the framework libraries
 for Linux and for Windows in multiple command steps and is described here.
 
 For Linux Qt it is best to build it using a Docker container having the correct distro.  
 The build for Windows is done using the same shell script
 using [Cygwin](https://github.com/Scanframe/sf-cygwin-bin "Cygwin repository at GitHub.").
-Use the [cpp-builder.sh](cpp-builder.sh) script with option `--qt-ver ''` which builds docker
+Use the [cpp-builder.sh](../cpp-builder.sh) script with option `--qt-ver ''` which builds docker
 image without Qt libraries from which the Qt library itself can be built.
 
 ## Build the C++ Docker Image without Qt Libs
 
-The script [cpp-builder.sh](cpp-builder.sh) is used to build the C++ Docker image.
+The script [cpp-builder.sh](../cpp-builder.sh) is used to build the C++ Docker image.
 It builds one without Qt libraries and one with Qt libraries.
 
 The first common steps are:
@@ -38,7 +38,7 @@ The first common steps are:
 
 **3) Build the `gnu-cpp` image without the Qt-library.**
 
-By specifying option `--qt-ver` as empty string the script will build the image without Qt libraries.
+By specifying option `--qt-ver` as an empty string, the script will build the image without Qt libraries.
 
 ```shell
 ./cpp-builder.sh --qt-ver '' build
@@ -83,7 +83,7 @@ in the background and the attaching to it.
 ./build-qt-lib.sh attach
 ```
 
-When started the project must be `/mnt/project/build-src` and must be changed otherwise.
+When started, the project must be `/mnt/project/build-src` and must be changed otherwise.
 From the build-src directory the script `build-qt-lib.sh` is mounted as `build.sh`.
 
 Run the `./build.sh` to check if it checks out the correct version.
@@ -98,6 +98,7 @@ Run the `./build.sh` to check if it checks out the correct version.
 
 ```shell
 ./build.sh clone
+# Updating does not always work.
 ./build.sh update
 ```
 
@@ -111,8 +112,17 @@ The command executes the `./init-repository` script in the Qt-repository.
 
 **4) Configure CMake.**
 
+Before configuring and moving to a different version when still having the former build directory, it is best to clean
+first.
+
 ```shell
-./build.sh conf
+./build.sh --qt-ver '6.x.x' clean
+```
+
+> Skip the second clean action which wipes the sources too and is not needed most times.
+
+```shell
+./build.sh --qt-ver '6.x.x' conf
 ```
 
 **5) Fix features not automatically set when configuring.**
@@ -122,22 +132,22 @@ The feature `system_xcb_xinput` with flag `FEATURE_system_xcb_xinput:BOOL=OFF` s
 To check this and fix it, run the following commands:
 
 ```shell
-./build.sh check
-./build.sh fix
+./build.sh --qt-ver '6.x.x' check
+./build.sh --qt-ver '6.x.x' fix
 # Check if the feature is set to ON.
-./build.sh check
+./build.sh --qt-ver '6.x.x' check
 ```
 
 **6) Build the actual Qt-Libraries.**
 
 ```shell
-./build.sh build
+./build.sh --qt-ver '6.x.x' build
 ```
 
 **7) Install the build into the Qt-versioned directory.**
 
 ```shell
-./build.sh install
+./build.sh --qt-ver '6.x.x' install
 ```
 
 ### Windows Build

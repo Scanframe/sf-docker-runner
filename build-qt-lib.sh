@@ -13,6 +13,8 @@ run_dir="$(realpath "${run_dir}")"
 # Include WriteLog function.
 source "${script_dir}/inc/Miscellaneous.sh"
 
+trap 'ScriptExit "${BASH_SOURCE}" "${BASH_LINENO}" "${BASH_COMMAND}"' EXIT
+
 # Move to it.
 cd "${run_dir}"
 
@@ -23,10 +25,10 @@ qt_repo="https://code.qt.io/qt/qt5.git"
 # Ignored submodules which are huge and not used.
 mods_ignore=(qtwebchannel qtwebengine qtwebglplugin qtwebview)
 
-# Install base directory for this machine.
+# Install base directory for this host.
 dir_file="${run_dir}/.install-dir-$(uname -n)"
-# Check if the directory file exists.
-if [[ -f "${dir_file}" ]]; then
+# Check if the file exists otherwise use the default.
+if [[ -f "${dir_file}" && "${os_name}" == "Cygwin" ]]; then
 	# Read the first line of the file and strip the newline.
 	lib_base_dir="$(head -n 1 "${dir_file}" | tr -d '\n' | tr -d '\n' | tr -d '\r')"
 else
@@ -148,6 +150,7 @@ done
 declare -A wg_pkgs
 wg_pkgs["CMake C++ build tool"]="Kitware.CMake"
 wg_pkgs["Ninja build system"]="Ninja-build.Ninja"
+wg_pkgs["Python.Python 3.12"]="Python.Python.3.12"
 wg_pkgs["Git"]="Git.Git"
 
 # List of Apt packages to install.
@@ -157,7 +160,8 @@ lnx_pkgs+=(cmake)
 lnx_pkgs+=(ninja-build)
 lnx_pkgs+=(perl)
 lnx_pkgs+=(python3)
-lnx_pkgs+=(clang)
+#lnx_pkgs+=(clang)
+#lnx_pkgs+=(libclang-dev)
 lnx_pkgs+=(cmake)
 lnx_pkgs+=(cmake-curses-gui)
 lnx_pkgs+=(libasound2-dev)
@@ -167,7 +171,6 @@ lnx_pkgs+=(libavformat-dev)
 lnx_pkgs+=(libavutil-dev)
 lnx_pkgs+=(libswresample-dev)
 lnx_pkgs+=(libswscale-dev)
-lnx_pkgs+=(libclang-dev)
 lnx_pkgs+=(libcups2-dev)
 lnx_pkgs+=(libcurl4-openssl-dev)
 lnx_pkgs+=(libfontconfig1-dev)
@@ -238,6 +241,9 @@ lnx_pkgs+=(libpipewire-0.3-dev)
 lnx_pkgs+=(libspa-0.2-dev)
 lnx_pkgs+=(ffmpeg)
 lnx_pkgs+=(protobuf-compiler)
+# Missing for 6.12.0 ?
+lnx_pkgs+=(protobuf-c-compiler)
+lnx_pkgs+=(openapi-specification)
 
 # Set some defaults depending on the current OS.
 if [[ "${os_name}" == "Cygwin" ]]; then
@@ -261,8 +267,8 @@ build_dir="${run_dir}/build-${os_code}-$(uname -m)"
 # Install directory for cmake.
 if [[ "${os_name}" == "Cygwin" ]]; then
 	install_dir="${lib_dir}/${qt_ver}/${compiler}_64"
-	build_dir="/cygdrive/p/tmp/build-${compiler}-${os_code}-$(uname -m)"
 	if [[ -n "${TEMP}" ]]; then
+		build_dir="${TEMP}/build-${compiler}-${os_code}-$(uname -m)"
 		repo_dir="${TEMP}/${repo_dir}"
 	else
 		WriteLog "Cygwin is missing 'TEMP' environment variable!"
@@ -274,16 +280,19 @@ else
 		install_dir="${lib_dir}/${qt_ver}/gcc_64"
 	fi
 fi
+
 # Form the zip-filepath using the found or set Qt version.
 zip_file_base="${run_dir}/qt-${os_code}-$(uname -m)-${qt_ver}"
 zip_file="${zip_file_base}.zip"
 
 qt_host_path="/mnt/project/lnx-x86_64/${qt_ver}/gcc_64"
+# Holds the toolchain environment variables file.
+tc_env_vars_file=""
 
 # Detect windows using the cygwin 'uname' command.
 if [[ "${os_name}" == "Cygwin" ]]; then
 	# Tools directory for this machine using the specified compiler.
-	GetEnvironmentFromFile "${run_dir}/.toolchain-${compiler}-$(uname -n)"
+	tc_env_vars_file="${run_dir}/.toolchain-${compiler}-$(uname -n)"
 elif [[ "${os_name}" == "GNU/Linux" ]]; then
 	WriteLog "# Linux $(uname -m) detected"
 else
@@ -295,6 +304,7 @@ function report {
 # Operating System  : ${os_name} (${os_code})
 # Qt Repository     : ${qt_repo} (v${qt_ver})
 # Compiler          : ${compiler} (Windows only)
+# Env Vars File     : ${tc_env_vars_file} (Windows only)
 # Repo directory    : ${repo_dir}
 # Run directory     : ${run_dir}
 # Build Directory   : ${build_dir}
@@ -303,9 +313,8 @@ function report {
 # Zip file          : ${zip_file}
 # Git Command       : ${git_cmd}
 # Qt Host Path      : ${qt_host_path}"
-
+	#
 	if [[ "${os_name}" == "Cygwin" ]]; then
-		WriteLog "# Windows Tools File: ${dir_file}"
 		if command -v gcc >/dev/null; then
 			WriteLog "# GCC Version       : $("gcc" --version | head -n 1 | tr -d '\n' | tr -d '\r')"
 		fi
@@ -314,6 +323,9 @@ function report {
 		fi
 	fi
 }
+
+# Set some required env vars and PATH for the toolchain.
+[[ -n "${tc_env_vars_file}" ]] && GetEnvironmentFromFile "${tc_env_vars_file}"
 
 # Command available from outside Docker.
 case $1 in
@@ -324,7 +336,7 @@ case $1 in
 
 	run | start | stop | attach)
 		# Run Docker C++ builder image without a Qt version configured.
-		"${run_dir}/cpp-builder.sh" --qt-ver '' --project "${run_dir}/../../../applications/library/qt" "$@"
+		"${run_dir}/cpp-builder.sh" --revision 1 --qt-ver '' --project "${run_dir}/../../../applications/library/qt" "$@"
 		exit 0
 		;;
 
@@ -445,31 +457,28 @@ case $1 in
 		# Assemble the options array.
 		options=("--module-subset=default" "${mods_ignore[@]}")
 		pushd "${repo_dir}" >/dev/null
+		init_cmd=()
 		if [[ "${os_name}" == "Cygwin" ]]; then
-			WriteLog "Initializing repository sub modules..."
-			if [[ "${1}" == "init" ]]; then
-				WriteLog "# Options: $(JoinBy ",-" "${options[@]}")"
-				cmd /c "$(cygpath -w "${PWD}/init-repository.bat")" --force "$(JoinBy "," "${options[@]}")"
-			else
-				cmd /c "$(cygpath -w "${PWD}/init-repository.bat")" --force --branch --module-subset=default
-			fi
-			# When in Windows the access control list needs to be fixed so batch files can be
-			# called from cmake.exe when cloned using Cygwin git.
-			[[ "${os_name}" == "Cygwin" ]] && read -rp "Granting 'Users' group full-access to cloned repository [y/N]?" &&
-				if [[ $REPLY = [yY] ]]; then
-					WriteLog "Granting 'Users' group full-access to '${repo_dir}'."
-					# Reset the access control list changes made while cloning by Git form cygwin.
-					icacls . /reset /T /C
-				fi
+			init_cmd+=(cmd /c "$(cygpath -w "${PWD}/init-repository.bat")")
 		else
-			if [[ "${1}" == "init" ]]; then
-				# Omit module qtwebengine when 'https://code.qt.io/qt/qtwebengine-chromium.git' since giving a 503 error.
-				# Some additional modules need to be omitted due to failing configuration and this seems to fix that.
-				./init-repository --force --branch "$(JoinBy ",-" "${options[@]}")"
-			else
-				./init-repository --force --branch --module-subset=default
-			fi
+			init_cmd+=(./init-repository)
 		fi
+		init_cmd+=(--force --branch)
+		if [[ "${1}" == "init" ]]; then
+			init_cmd+=("$(JoinBy ",-" "${options[@]}")")
+		else
+			init_cmd+=(--module-subset=default)
+		fi
+		WriteLog "~" "${init_cmd[@]}"
+		"${init_cmd[@]}"
+		# When in Windows the access control list needs to be fixed so batch files can be
+		# called from cmake.exe when cloned using Cygwin git.
+		[[ "${os_name}" == "Cygwin" ]] && read -rp "Granting 'Users' group full-access to cloned repository [y/N]?" &&
+			if [[ $REPLY = [yY] ]]; then
+				WriteLog "Granting 'Users' group full-access to '${repo_dir}'."
+				# Reset the access control list changes made while cloning by Git form cygwin.
+				icacls . /reset /T /C
+			fi
 		popd >/dev/null
 		;;
 
@@ -568,7 +577,6 @@ EOD
 
 		if [[ "${os_name}" == "Cygwin" ]]; then
 			conf_cmd=(cmd /c "$(cygpath -w "${repo_dir}/configure.bat")")
-			#conf_cmd=("../${repo_dir}/configure.bat")
 			conf_cmd+=(-prefix "$(cygpath -w "${install_dir}")")
 		else
 			conf_cmd=("${run_dir}/${repo_dir}/configure")
@@ -588,12 +596,6 @@ EOD
 		conf_cmd+=(-nomake examples)
 		conf_cmd+=(-nomake tests)
 		conf_cmd+=(-nomake benchmarks)
-
-		if [[ "${os_name}" != "Cygwin" ]]; then
-			echo "==="
-#			conf_cmd+=(-make libs)
-#			conf_cmd+=(-make tools)
-		fi
 		conf_cmd+=(-feature-designer)
 		conf_cmd+=(-skip qtcharts)
 		conf_cmd+=(-skip qtdoc)
@@ -610,11 +612,11 @@ EOD
 		conf_cmd+=(-skip qtwebchannel)
 		conf_cmd+=(-skip qtwebengine)
 		conf_cmd+=(-skip qtwebview)
-		#conf_cmd+=(-skip qtdeclarative)
 		conf_cmd+=(-skip qtlocation)
 		conf_cmd+=(-skip qtlottie)
 		conf_cmd+=(-skip qtopcua)
 		conf_cmd+=(-skip qtvirtualkeyboard)
+		#conf_cmd+=(-skip qtdeclarative)
 		#conf_cmd+=(-skip qtmqtt)
 		#conf_cmd+=(-skip qtmultimedia)
 		#conf_cmd+=(-skip qtshadertools)

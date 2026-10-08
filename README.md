@@ -46,13 +46,12 @@ Create a comprehensive Docker-based C++ build environment that supports:
 - **Entrypoint**: Sophisticated user/permission handling to match host UID/GID
 - **FUSE mounting**: Zip-mounted libraries and toolchains for space efficiency
 
-
 The system enables consistent, reproducible C++ builds across platforms while maintaining developer workflow
 flexibility.
 
 ### Python Build Script
 
-The `bin/build.py` script from the [**CMake Library**](https://git.scanframe.com/library/cmake-lib/-/branches) 
+The `bin/build.py` script from the [**CMake Library**](https://git.scanframe.com/library/cmake-lib/-/branches)
 is responsible for automating the build process of C++ projects using CMake.  
 The script provides a bootstrap option for creating a new C++ boilerplate project.
 It provides a convenient interface for developers to execute build commands.  
@@ -105,24 +104,26 @@ is used to handle it.
 
 For Linux the order of the steps is:
 
-1. Pull the base image from DockerHub  
+1. Optionally, set a fixed timestamp for downloads to be cached for a next build.  
+	 `./cpp-builder.sh timestamp`.
+2. Pull the base image from DockerHub.  
 	 `./cpp-builder.sh base-pull`.
-2. Push the base image to the Nexus Docker registry  
+3. Push the base image to the Nexus Docker registry.  
 	 `./cpp-builder.sh base-push`.
-3. Build the image to build a Linux Qt version with  
+4. Build the image to build a Linux Qt version with.  
 	 `./cpp-builder.sh --qt-ver '' build`.
-4. Build the image to build projects using the specified Qt version (`<qt-ver>`)  
+5. Build the image to build projects using the specified Qt version (`<qt-ver>`).  
 	 `./cpp-builder.sh --qt-ver '<qt-ver>' build`.  
 	 This step requires the Qt-version zipped library to be uploaded or present on the Nexus shared storage.
-5. Push the image to the Nexus Docker registry  
+6. Push the image to the Nexus Docker registry.  
 	 `./cpp-builder.sh --qt-ver '<qt-ver>' push`.
-6. Push the image to Docker Hub registry  
+7. Push the image to Docker Hub registry.  
 	 `./cpp-builder.sh --qt-ver '<qt-ver>' docker-push`.
-6. Make the image get the latest tag on Docker Hub  
+8. Make the image get the latest tag on Docker Hub.  
 	 `./cpp-builder.sh --qt-ver '<qt-ver>' docker-latest`.
 
 > For the **aarch64** version the same steps are performed on a Raspberry Pi 5 or an **aarch64** image running on an *
-*x86_64** machine using **qemu**.  
+> *x86_64** machine using **qemu**.  
 > The **aarch64** image can only build QT targets for **aarch64** as where the **x86_64** one does all 3.
 
 The zip-files are locally stored in the Nexus repository having the following directory structure:
@@ -209,3 +210,88 @@ using multiple command steps:
 See also the [Qt from source](doc/qt-from-source.md) document.
 
 ::include{file=doc/cpp-builder-process.puml}
+
+## Preparations
+
+### Windows
+
+To run the `build-qt-lib.sh` script Cygwin is required.  
+Install **Cygwin** with the following command.
+
+```shell
+powershell -Command "Invoke-Expression(Invoke-WebRequest -Uri 'https://git.scanframe.com/shared/bin-bash/-/raw/master/install-cygwin.ps1' -UseBasicParsing).Content"
+```
+
+Download the toolchains to a local directory, since mounted drives are not working.
+On the **Nexus** [repository](https://nexus.scanframe.com/#browse/browse:shared:library%2Ftoolchain) you find two,
+Mingw-w64 and MSVC.
+
+The `build-qt-lib.sh` requires the location of the toolchains and is provided using environment variable modification
+files, and CMake finds the correct executable that way.
+
+The format of the filename in the root of the project is `.toolhcain-<compiler>-<hostname>` where `<compiler>` is
+`mingw` or `msvc` and `<hostname>`.
+
+#### Example file of a MinGW64 Compiler
+
+Filename: `.toolchain-mingw-vm-windev`
+
+```bash
+# Prepend the environment variable PATH with the toolchain binary directory.
+PATH=C:\toolchain\w64-x86_64-mingw-1320-posix\bin;${PATH}
+```
+
+#### Example file for MSVC 2022 or MSVC 2026 Compiler
+
+Filename: `.toolchain-msvc-vm-windev`
+
+```bash
+# MSVC toolchain required environment variables.
+
+# HOME is standard not present in Windows.
+#HOME=${HOMEDRIVE}${HOMEPATH}
+
+# MSVC version and Windows SDK version 2022.
+MSVC_ROOT=C:\toolchain\w64-x86_64-msvc-2022
+
+VCToolsVersion=14.44.35207
+WindowsSDKVersion=10.0.26100.0
+
+# MSVC version and Windows SDK version 2026.
+#MSVC_ROOT=P:\toolchain\w64-x86_64-msvc-2026
+#VCToolsVersion=14.50.35717
+#WindowsSDKVersion=10.0.26100.0
+
+# Host and target architecture.
+VSCMD_ARG_HOST_ARCH=x64
+VSCMD_ARG_TGT_ARCH=x64
+
+# Set the environment variables.
+VCToolsInstallDir=${MSVC_ROOT}\VC\Tools\MSVC\${VCToolsVersion}
+WindowsSdkBinPath=${MSVC_ROOT}\Windows Kits\10\bin
+
+# Prepend the Windows SDK bin path to the PATH variable
+PATH=${MSVC_ROOT}\VC\Tools\MSVC\${VCToolsVersion}\bin\Hostx64\x64;${MSVC_ROOT}\Windows Kits\10\bin\${WindowsSDKVersion}\x64;${MSVC_ROOT}\Windows Kits\10\bin\${WindowsSDKVersion}\x64\ucrt;${PATH}
+INCLUDE=${MSVC_ROOT}\VC\Tools\MSVC\${VCToolsVersion}\include;${MSVC_ROOT}\VC\Tools\MSVC\${VCToolsVersion}\atlmfc\include;${MSVC_ROOT}\Windows Kits\10\Include\${WindowsSDKVersion}\ucrt;${MSVC_ROOT}\Windows Kits\10\Include\${WindowsSDKVersion}\shared;${MSVC_ROOT}\Windows Kits\10\Include\${WindowsSDKVersion}\um;${MSVC_ROOT}\Windows Kits\10\Include\${WindowsSDKVersion}\winrt;${MSVC_ROOT}\Windows Kits\10\Include\${WindowsSDKVersion}\cppwinrt
+LIB=${MSVC_ROOT}\VC\Tools\MSVC\${VCToolsVersion}\lib\x64;${MSVC_ROOT}\VC\Tools\MSVC\${VCToolsVersion}\atlmfc\lib\x64;${MSVC_ROOT}\Windows Kits\10\Lib\${WindowsSDKVersion}\ucrt\x64;${MSVC_ROOT}\Windows Kits\10\Lib\${WindowsSDKVersion}\um\x64
+```
+
+### Library Install Location
+
+The library or framework install-directory is also provided by a file containing a directory.  
+The file is formatted with `.install-dir-<hostname>`.
+
+#### Example file
+
+```
+/cygdrive/s/applications/library/qt
+```
+
+
+
+
+
+
+
+
+

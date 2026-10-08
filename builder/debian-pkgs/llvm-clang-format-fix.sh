@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Get the script directory.
+#script_dir="$(cd "$(dirname "${0}")" && pwd)"
+
 if [[ "$1" == "download" ]]; then
 
 	sudo apt-get update
@@ -15,7 +18,7 @@ elif [[ "$1" == "fix" ]]; then
 
 	# 3. Change the dependency from clang-format-23 to clang-format-24 in the control file
 	sed -i 's/clang-format-23 (>= 1:23~)/clang-format-24/g' custom-clang-format/DEBIAN/control
-
+	sed -i '/^Version:/ { /+local1$/! s/$/+local1/ }' custom-clang-format/DEBIAN/control
 	# 3. Update any physical symlink inside the extracted filesystem
 	find custom-clang-format -type l -lname '*23*' -exec sh -c '
     for link; do
@@ -24,6 +27,7 @@ elif [[ "$1" == "fix" ]]; then
       ln -sf "$target" "$link"
     done
   ' sh {} +
+
 
 elif [[ "$1" == "pack" ]]; then
 
