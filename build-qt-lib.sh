@@ -57,6 +57,8 @@ function show_help {
   --qt-ver        : Qt version to build.
   -c, --compiler  : Compiler (mingw, msvc) for Windows to load the correct load toolchain file (default: ${compiler}).
                     File is named like: '.toolchain-<compiler>-<hostname>
+  --temp          : Set the location for Windows in Cygwin path notation for storing the build and repo directory.
+                    Default used is the environment variable 'TEMP'.
 "
 	echo "Available commands:
   help      : Shows this help.
@@ -95,7 +97,7 @@ Steps to build Qt v${qt_ver} in order are:
 }
 
 # Parse options.
-temp=$(getopt -o 'hc:w' --long 'help,qt-ver:,compiler:,windows' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hc:w' --long 'help,qt-ver:,compiler:,windows,temp:' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	show_help
@@ -130,6 +132,12 @@ while true; do
 
 		-c | --compiler)
 			compiler="${2}"
+			shift 2
+			continue
+			;;
+
+		--temp)
+			temp_root="${2}"
 			shift 2
 			continue
 			;;
@@ -260,6 +268,8 @@ else
 	git_cmd='git'
 fi
 
+
+
 # Directory to eventually ZIP.
 lib_dir="${lib_base_dir}/${os_code}-$(uname -m)"
 # Build directory.
@@ -267,9 +277,11 @@ build_dir="${run_dir}/build-${os_code}-$(uname -m)"
 # Install directory for cmake.
 if [[ "${os_name}" == "Cygwin" ]]; then
 	install_dir="${lib_dir}/${qt_ver}/${compiler}_64"
-	if [[ -n "${TEMP}" ]]; then
-		build_dir="${TEMP}/build-${compiler}-${os_code}-$(uname -m)"
-		repo_dir="${TEMP}/${repo_dir}"
+	# USet the temp directory as root for build and repo subdirectories.
+	temp_root="${temp_root:-${TEMP}}"
+	if [[ -n "${temp_root}" ]]; then
+		build_dir="${temp_root}/build-${compiler}-${os_code}-$(uname -m)"
+		repo_dir="${temp_root}/${repo_dir}"
 	else
 		WriteLog "Cygwin is missing 'TEMP' environment variable!"
 	fi
@@ -390,7 +402,7 @@ case $1 in
 
 	local)
 		if [[ "${os_name}" == "Cygwin" ]]; then
-			WriteLog "- Ignored in Cygwin on Windows."
+			WriteLog "- Ignored in Cygwin on Windows. (${repo_dir})"
 		else
 			WriteLog "- Creating symlink to tmp directory for repository directory for speed."
 			# Create a symlink for the repository in the temp directory to speed up

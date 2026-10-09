@@ -32,16 +32,17 @@ elif [[ "$1" == "fix" ]]; then
 elif [[ "$1" == "pack" ]]; then
 
 	# 4. Rebuild the updated .deb package
-	dpkg-deb -b custom-clang-format clang-format-fixed.deb
+	dpkg-deb -b custom-clang-format clang-format-fix.deb
 
 elif [[ "$1" == "install" ]]; then
 
 	# 5. Install clang-format-24 first, then install your custom meta-package
 	#apt-get install -y clang-format-24
-	#sudo dpkg -i clang-format-fixed.deb
-	sudo apt-get install --yes ./clang-format-fixed.deb
+	#sudo dpkg -i clang-format-fix.deb
+	sudo apt-get install --yes ./clang-format-fix.deb
 
 else
 
 	echo "Commands: download, unpack, fix, pack, install"
+
 fi

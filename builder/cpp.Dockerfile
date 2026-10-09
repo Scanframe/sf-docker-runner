@@ -31,9 +31,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     wget --quiet "https://apt.llvm.org/llvm-snapshot.gpg.key" -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
     apt-add-repository --yes --no-update "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc) main" && \
     wget --quiet -O - "https://apt.kitware.com/keys/kitware-archive-latest.asc" | gpg --dearmor - > /etc/apt/trusted.gpg.d/kitware.gpg && \
-    apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" && \
-    (apt-get --yes install clang-format || apt-get --yes install /tmp/build-dir/debian-pkgs/clang-format-24.deb) && \
-    apt-get --yes install \
+    apt-add-repository --yes "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=bind,source=.,target=/tmp/build-dir \
+    (apt-get --yes install clang-format || apt-get --yes install /tmp/build-dir/debian-pkgs/clang-format-fix.deb) && apt-get --yes install \
     locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb-mingw-w64-target ccache gdb gdbserver valgrind chrpath dpkg-dev \
     patchelf bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix shfmt pkg-config \
     python3 python3-venv python3-dev python3-pefile python3-pyelftools python3-requests python-is-python3 \
