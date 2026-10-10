@@ -33,9 +33,11 @@ qt_lib_dir="${HOME}/lib/qt"
 # Offset of the Nexus server URL to the zipped libraries.
 raw_lib_offset="repository/shared/library"
 # Initialize Qt version library to find the highest version available.
-qt_ver='max'
+qt_ver=""
 # Pauses the script before executing a command.
 flag_pause=true
+# Run the image using only the base not having the the Qt suffix.
+flag_base_only=false
 # Set the default architecture.
 architecture="$(uname -m)"
 # When running from a 'aarch64' machine set some other defaults.
@@ -46,7 +48,7 @@ fi
 # Optional timestamp file to make it stop loading compressed files and use the cache.
 timestamp_file="/tmp/docker-import-timestamp.txt"
 # Default is tar+gzip.
-zip_format=false
+compress_format=tgz
 
 # Prints the help.
 #
@@ -64,7 +66,8 @@ function show_help {
     --base-ver      : Version/tag of the base image which defaults to '${base_img_tag}' for base image '${base_img_name}'.
     --platform      : Platform defaults to '${platform}' available is also 'arm64'.
     --qt-ver        : Version of the the Qt library to instead of newest one available.
-    --zip           : Compress files using the zip-format, by default is uses tar + gzip.
+    --base-only     : Do not use the qt-ver to use as suffix for running the image.
+    --compress <tp> : Compress files using the given type 'zip' and 'tgz' the default for '.tar.gz' files.
     -y, --yes       : No questions asked to perform the command.
     --revision       : Image release adds a revision part to the image tag.
 
@@ -79,12 +82,13 @@ function show_help {
     qt-win          : Generates the 'qt-win.tar.gz' from the current user's Cross Windows Qt framework/library location.
     qt-w64          : Generates the 'qt-w64.tar.gz' from the Windows Qt library relative to the current user's Qt.
     qt-w64-tools    : Generates the 'qt-tools.tar.gz' from the Windows Qt library relative to the current user's Qt.
-    win-tools       : Generates the 'win-x86_64-combi.tar.gz'.
-    lnx-tools       : Generates the 'lnx-<architecture>-combi.tar.gz'.
     qt-lnx-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-lnx-<architecture>-<qt-ver>.tar.gz'.
     qt-win-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-win-<architecture>-<qt-ver>.tar.gz'.
     qt-w64-up       : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-<architecture>-<qt-ver>.tar.gz'.
     qt-w64-tools-up : Uploads the generated zip-file to the Nexus server as '${raw_lib_offset}/qt/qt-w64-tools.zip'.
+    qt-all          : Compresses and uploads all qt libraries of the given Qt version.
+    win-tools       : Generates the 'win-x86_64-combi.tar.gz'.
+    lnx-tools       : Generates the 'lnx-<architecture>-combi.tar.gz'.
     win-tools-up    : Uploads the generated zip-file to the Nexus server'.
     lnx-tools-up    : Uploads the generated zip-file to the Nexus server'.
     run             : Runs the docker container named '${container_name}' in the foreground mounting without passing the hosts X11 server.
@@ -136,7 +140,7 @@ docker_file="${work_dir}/cpp.Dockerfile"
 cd "${script_dir}" || exit 1
 
 # Parse options.
-temp=$(getopt -o 'hp:y' --long 'help,platform:,base-image:,project:,base-ver:,qt-ver:,revision:,zip,yes' -n "$(basename "${0}")" -- "$@")
+temp=$(getopt -o 'hp:y' --long 'help,platform:,base-image:,project:,base-ver:,base-only,qt-ver:,revision:,compress:,yes' -n "$(basename "${0}")" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	show_help
@@ -155,6 +159,11 @@ while true; do
 
 		-y | --yes)
 			flag_pause=false
+			shift
+			;;
+
+		--base-only)
+			flag_base_only=true
 			shift
 			;;
 
@@ -192,9 +201,9 @@ while true; do
 			continue
 			;;
 
-		--zip)
-			zip_format=true
-			shift 1
+		--compress)
+			compress_format="${2}"
+			shift 2
 			continue
 			;;
 
@@ -227,7 +236,7 @@ while true; do
 done
 
 # Determine the used file compression.
-if ${zip_format}; then
+if [[ ${compress_format}  == "zip" ]]; then
 	# File compression with zip.
 	compress_suffix=".zip"
 	compress_exclude="-x"
@@ -274,8 +283,8 @@ if [[ "${qt_ver}" == 'max' ]]; then
 	fi
 fi
 
-# Assign the correct image tag.
-if [[ -n "${qt_ver}" ]]; then
+# Assemble the image tag using the Qt version when required.
+if [[ -n "${qt_ver}" ]] && ! ${flag_base_only}; then
 	img_tag="${base_img_tag}-${qt_ver}"
 else
 	img_tag="${base_img_tag}"
@@ -629,7 +638,10 @@ case "${cmd}" in
 
 	versions)
 		# Just reenter the script using the the correct arguments.
-		"${0}" --yes --base-ver "${base_img_tag}" --qt-ver "${qt_ver}" run -- /home/user/bin/versions.sh
+		exec_cmd=("${0}" --yes --base-ver "${base_img_tag}" --qt-ver "${qt_ver}" run)
+		$flag_base_only && exec_cmd+=(--base-only)
+		exec_cmd+=(-- /home/user/bin/versions.sh)
+		"${exec_cmd[@]}"
 		;;
 
 	run | runx | start | startx)
@@ -653,7 +665,12 @@ case "${cmd}" in
 		# Script home/user/bin/entrypoint.sh picks this up or uses the id' from the mounted project user.
 		dckr_cmd+=(--env LOCAL_USER="$(id -u):$(id -g)")
 		dckr_cmd+=(--user user:user)
+		# Debugging for 'entrypoint.sh' script.
 		dckr_cmd+=(--env DEBUG=1)
+		if ${flag_base_only}; then
+			dckr_cmd+=(--env "SF_QT_VERSION=${qt_ver}")
+		fi
+		#
 		if [[ "${cmd}" == "runx" || "${cmd}" == "startx" ]]; then
 			# Check if the host has a X11 display running at all.
 			if [[ -z "${DISPLAY}" || ! -f "${HOME}/.Xauthority" ]]; then
@@ -699,6 +716,25 @@ case "${cmd}" in
 		else
 			docker exec --interactive --tty "${container_name}" sudo --login --user=user -- "${@}"
 		fi
+		;;
+
+	qt-all)
+		declare -A targets
+		targets['lnx']="amd64 arm64"
+		targets['win']="amd64"
+		targets['w64']="amd64"
+		# Loop through the keys and loop through each architecture.
+		for os in "${!targets[@]}"; do
+			for arch in ${targets[$os]}; do
+				for compression in "tgz" "zip"; do
+					for sub_cmd in "qt-${os}" "qt-${os}-up"; do
+						cmd_line=("${0}" --yes --qt-ver "${qt_ver}" --platform "${arch}" --compress "${compression}" "${sub_cmd}")
+						WriteLog "~ ${cmd_line[*]}"
+						"${cmd_line[@]}"
+					done
+				done
+			done
+		done
 		;;
 
 	*)

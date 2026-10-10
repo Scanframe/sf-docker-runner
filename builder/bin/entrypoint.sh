@@ -1,16 +1,47 @@
 #!/usr/bin/env bash
 
+# Exit at first error.
+#set -e
+
+script_name="${0}"
+
 function WriteLog {
-	if [[ -n "${DEBUG}" ]]; then
+	if [[ "${DEBUG}" -ne 0 ]]; then
 		echo "${@}" 1>&2
 	fi
 }
 
-# Report the current command to stderr
-WriteLog "Entrypoint($(id -u)):" "${@}"
+##
+# Function to trap script exit.
+# Arg1: ${BASH_SOURCE}
+# Arg2: ${BASH_LINENO}
+# Arg3: ${BASH_COMMAND}
+#
+function ScriptExit {
+	local exitcode="${?}" idx line file func
+	# Show the stack in case of an error.
+	if [[ "${exitcode}" -ne 0 ]]; then
+		# Create
+		WriteLog -e "\n--- Call Stack [$(id --user)]: ${script_name}  ---"
+		# Perform a stack trace.
+		idx=0
+		while read -r line func file < <(caller $idx); do
+			# When the line number is 1 clear the line number and use the passed failed command.
+			[[ "${line}" -eq 1 ]] && line=""
+			WriteLog "[$idx] $file:$line $func(): $([[ -n "${line}" ]] && sed -n "${line}"p "$file" || echo "$3")"
+			((idx += 1))
+		done
+		WriteLog "! Exitcode: ${exitcode}"
+	fi
+	# Propagate the exit code.
+	exit "${exitcode}"
+}
 
-# Fixing the warning message 'unable to resolve host ???'.
-echo "127.0.1.1  $(cat /etc/hostname)" | sudo tee --append /etc/hosts >/dev/null
+# Report the current command to stderr
+WriteLog "Entrypoint as user ($(id -u)) with:" "${@}"
+
+## Trap script exit with function.
+trap 'ScriptExit "${BASH_SOURCE}" "${BASH_LINENO}" "${BASH_COMMAND}"' EXIT
 
 # Check if root is executing the entrypoint.
 if [[ "$(id -u)" -eq 0 ]]; then
@@ -34,7 +65,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	# Change the owner of 'user' home directory and all in the 'bin' directory.
 	chown user:user ~user
 	# Change the ownership of a possible the existing temporary wine directory created during the image building.
-	chown user:user --recursive /tmp/wine-* 2>/dev/null
+	chown user:user --recursive /tmp/wine-* >/dev/null 2>&1 || true
 	#chown user:user -R ~user/.wine
 	chown user:user --recursive ~user/bin
 	# Add symlink to project mount when it exists.
@@ -88,12 +119,53 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		fi
 	fi
 
+	# Get the tool-combi file for mounting.
+	mapfile -d '' zip_files < <(find "${HOME}" -maxdepth 1 -type f \( -name "tool-combi.zip" -o -name "tool-combi.tar.gz" \) -print0)
+	# Mount the combination of tools.
+	for zip_file in "${zip_files[@]}"; do
+		if [[ -f "${zip_file}" ]]; then
+			mount_dir="${HOME}/tools"
+			if ! ratarmount -o ro,allow_other "${zip_file}" "${mount_dir}" >/dev/null; then
+				WriteLog "Mounting tool-combi compressed file '${zip_file}' onto '${mount_dir}' failed!"
+			else
+				WriteLog "Compressed tool-combi compressed file '${zip_file}' is mounted on '${mount_dir}'."
+			fi
+		fi
+	done
+
+	# Get all the of the toolchain compressed-files.
+	mapfile -d '' zip_files < <(find "${HOME}" -maxdepth 1 -type f \( -name "toolchain-*.zip" -o -name "toolchain-*.tar.gz" \) -print0)
+	# Check if toolchain files were found.
+	if [[ "${#zip_files[@]}" -ne 0 ]]; then
+		# No need to create a mount directory ratarmount does it all.
+		if ! ratarmount -o ro,allow_other "${zip_files[@]}" "${HOME}/toolchain" >/dev/null; then
+			WriteLog "Mounting toolchain compressed files onto '${mount_dir}' failed!"
+		else
+			WriteLog "Compressed toolchain files are mounted on '${mount_dir}'."
+		fi
+	fi
+
 	# Check if the Qt compressed libraries are available.
 	if [[ -d "/usr/local/lib/qt" ]]; then
 		WriteLog "Qt compressed library is available."
 		mkdir --parents "${HOME}/lib"
 		ln -s "/usr/local/lib/qt" "${HOME}/lib/qt"
 	else
+		# Get the compressed native Qt library for aarch64 and x86_64 architectures.
+		if [[ -n "${SF_QT_VERSION}" ]]; then
+			# Set the compression suffix of the file to download.
+			file_suffix=".tar.gz"
+			# Get the download server location from the environment or use the default.
+			qt_dl_url="${SF_QT_DOWNLOAD_BASE:-https://nexus.scanframe.com/repository/shared/library/qt}"
+			WriteLog "Downloading Qt Framework v${SF_QT_VERSION} from '${qt_dl_url}'."
+			wget "${qt_dl_url}/qt-lnx-$(uname -m)-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-lnx-$(uname -m)${file_suffix}"
+			# Get the compressed Qt cross platform libraries only for the 'x86_64' machines.
+			if [[ "$(uname -m)" == 'x86_64' ]]; then \
+				wget "${qt_dl_url}/qt-win-x86_64-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-win-x86_64${file_suffix}" && \
+				wget "${qt_dl_url}/qt-lnx-aarch64-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-lnx-aarch64${file_suffix}" && \
+				wget "${qt_dl_url}/qt-w64-x86_64-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-w64-x86_64${file_suffix}"
+			fi
+		fi
 		# Keep track the qt version dirs of each mounted compressed file.
 		declare -A arch_qt_ver_dir
 		# Get all the of the qt library compressed-files.
@@ -129,38 +201,19 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			ln -s "${arch_qt_ver_dir['lnx-x86_64']}/gcc_64/libexec" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec-tmp"
 			mv "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec-tmp" "${arch_qt_ver_dir['lnx-aarch64']}/gcc_64/libexec"
 		fi
-		 # Get the tool-combi file.
-		mapfile -d '' zip_files < <(find "${HOME}" -maxdepth 1 -type f \( -name "tool-combi.zip" -o -name "tool-combi.tar.gz" \) -print0)
-		# Mount the combination of tools.
-		for zip_file in "${zip_files[@]}"; do
-			if [[ -f "${zip_file}" ]]; then
-				mount_dir="${HOME}/tools"
-				if ! ratarmount -o ro,allow_other "${zip_file}" "${mount_dir}" >/dev/null; then
-					WriteLog "Mounting tool-combi compressed file '${zip_file}' onto '${mount_dir}' failed!"
-				else
-					WriteLog "Compressed tool-combi compressed file '${zip_file}' is mounted on '${mount_dir}'."
-				fi
-			fi
-		done
-
-		# Get all the of the toolchain compressed-files.
-		mapfile -d '' zip_files < <(find "${HOME}" -maxdepth 1 -type f \( -name "toolchain-*.zip" -o -name "toolchain-*.tar.gz" \) -print0)
-		# Check if toolchain files were found.
-		if [[ "${#zip_files[@]}" -ne 0 ]]; then
-			# No need to create a mount directory ratarmount does it all.
-			if ! ratarmount -o ro,allow_other "${zip_files[@]}" "${HOME}/toolchain" >/dev/null; then
-				WriteLog "Mounting toolchain compressed files onto '${mount_dir}' failed!"
-			else
-				WriteLog "Compressed  toolchain files are mounted on '${mount_dir}'."
-			fi
-		fi
 	fi
 
 	WriteLog "Working directory: $(pwd)"
 	# With this file a ssh session get the variable.
-	mkdir --mode=0775 --parents "${HOME}/.ssh"
-	cat /mnt/project/*/.ssh-environment 2>/dev/null >"${HOME}/.ssh/environment"
-	chmod 600 "${HOME}/.ssh/environment"
+	mkdir --mode=0775 "${HOME}/.ssh"
+	# Copy the ssh-environment file from the project when it exist.
+	for fn in /mnt/project/*/.ssh-environment; do
+		if [[ -e "${fn}" ]]; then
+			cat "${fn}" >"${HOME}/.ssh/environment"
+			chmod 600 "${HOME}/.ssh/environment"
+			break
+		fi
+	done
 	# Check if the host has the X11 display passed.
 	if [[ -n "${DISPLAY}" && -f "${HOME}/.Xauthority" ]]; then
 		# Create file for profile to import to be used when running sshd.
@@ -189,6 +242,8 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	fi
 # When the current user is 'user' execute the script using sudo.
 elif [[ "$(id -nu)" == "user" ]]; then
+	# Fixing the warning message 'unable to resolve host ???'.
+	(echo "127.0.1.1 $(cat /etc/hostname)" | sudo tee --append /etc/hosts)>/dev/null 2>&1
 	# Execute this script but now as root passing the environment variables.
 	sudo -E "${0}" "${@}" || exit 1
 else

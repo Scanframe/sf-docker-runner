@@ -23,7 +23,6 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
 # Packge winehq-stable is not yet available for Ubuntu version 24.04 so there is a workaround when it does.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=bind,source=.,target=/tmp/build-dir \
     apt-get update && apt-get --yes upgrade --no-install-recommends && \
     apt-get --yes install wget curl zip gpg lsb-release software-properties-common iproute2 iputils-ping binutils rsync openssh-server && \
     mkdir /run/sshd && \
@@ -35,8 +34,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    --mount=type=bind,source=.,target=/tmp/build-dir \
-    (apt-get --yes install clang-format || apt-get --yes install /tmp/build-dir/debian-pkgs/clang-format-fix.deb) && apt-get --yes install \
+    --mount=type=bind,source=debian-pkgs,target=/tmp/debian-pkgs \
+    (apt-get --yes install clang-format || apt-get --yes install /tmp/debian-pkgs/clang-format-fix.deb) && apt-get --yes install \
     locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb-mingw-w64-target ccache gdb gdbserver valgrind chrpath dpkg-dev \
     patchelf bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix shfmt pkg-config \
     python3 python3-venv python3-dev python3-pefile python3-pyelftools python3-requests python-is-python3 \
