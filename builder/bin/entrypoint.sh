@@ -38,7 +38,7 @@ function ScriptExit {
 }
 
 # Report the current command to stderr
-WriteLog "Entrypoint as user ($(id -u)) with:" "${@}"
+WriteLog "Entrypoint as user ($(id -u)) with command:" "${@}"
 
 ## Trap script exit with function.
 trap 'ScriptExit "${BASH_SOURCE}" "${BASH_LINENO}" "${BASH_COMMAND}"' EXIT
@@ -146,24 +146,33 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	fi
 
 	# Check if the Qt compressed libraries are available.
-	if [[ -d "/usr/local/lib/qt" ]]; then
-		WriteLog "Qt compressed library is available."
+	local_mount="/usr/local/lib/qt"
+	WriteLog "Checking for mount at '${local_mount}'."
+	if [[ -d "${local_mount}" ]]; then
+		WriteLog "Qt library is available from '${local_mount}'."
 		mkdir --parents "${HOME}/lib"
-		ln -s "/usr/local/lib/qt" "${HOME}/lib/qt"
+		ln -s "${local_mount}" "${HOME}/lib/qt"
 	else
-		# Get the compressed native Qt library for aarch64 and x86_64 architectures.
+		# Get the compressed native Qt library for aarch64 and x86_64 architectures only when they do not exist yet.
 		if [[ -n "${SF_QT_VERSION}" ]]; then
-			# Set the compression suffix of the file to download.
-			file_suffix=".tar.gz"
-			# Get the download server location from the environment or use the default.
-			qt_dl_url="${SF_QT_DOWNLOAD_BASE:-https://nexus.scanframe.com/repository/shared/library/qt}"
-			WriteLog "Downloading Qt Framework v${SF_QT_VERSION} from '${qt_dl_url}'."
-			wget "${qt_dl_url}/qt-lnx-$(uname -m)-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-lnx-$(uname -m)${file_suffix}"
-			# Get the compressed Qt cross platform libraries only for the 'x86_64' machines.
-			if [[ "$(uname -m)" == 'x86_64' ]]; then \
-				wget "${qt_dl_url}/qt-win-x86_64-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-win-x86_64${file_suffix}" && \
-				wget "${qt_dl_url}/qt-lnx-aarch64-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-lnx-aarch64${file_suffix}" && \
-				wget "${qt_dl_url}/qt-w64-x86_64-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-w64-x86_64${file_suffix}"
+			WriteLog "Checking for existing Qt compressed files."
+			# Get the qt compressed files if they exists and ignore variable 'SF_QT_VERSION'.
+			shopt -s nullglob; qt_files=("${HOME}/"qt-*.zip "${HOME}/"qt-*.tar.gz); shopt -u nullglob
+			if [[ ${#qt_files[@]} -ne 0 ]]; then
+				WriteLog "Found '${#qt_files[@]}' and ignoring set 'SF_QT_VERSION' to '${SF_QT_VERSION}'."
+			else
+				# Set the compression suffix of the file to download.
+				file_suffix=".tar.gz"
+				# Get the download server location from the environment or use the default.
+				qt_dl_url="${SF_QT_DOWNLOAD_BASE:-https://nexus.scanframe.com/repository/shared/library/qt}"
+				WriteLog "Downloading Qt Framework v${SF_QT_VERSION} from '${qt_dl_url}'."
+				wget "${qt_dl_url}/qt-lnx-$(uname -m)-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-lnx-$(uname -m)${file_suffix}"
+				# Get the compressed Qt cross platform libraries only for the 'x86_64' machines.
+				if [[ "$(uname -m)" == 'x86_64' ]]; then \
+					wget "${qt_dl_url}/qt-win-x86_64-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-win-x86_64${file_suffix}" && \
+					wget "${qt_dl_url}/qt-lnx-aarch64-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-lnx-aarch64${file_suffix}" && \
+					wget "${qt_dl_url}/qt-w64-x86_64-${SF_QT_VERSION}${file_suffix}" -qO "${HOME}/qt-w64-x86_64${file_suffix}"
+				fi
 			fi
 		fi
 		# Keep track the qt version dirs of each mounted compressed file.
@@ -224,20 +233,13 @@ if [[ "$(id -u)" -eq 0 ]]; then
 
 	# Prevent any errors when resolving git tags.
 	git config --global --add safe.directory '*'
-	#	cat <<EOD > "${HOME}/.gitconfig"
-	#[user]
-	#    email = user@exmaple.com
-	#    name = User Example
-	#[safe]
-	#    directory = *
-	#EOD
 
 	# Execute CMD passed by the user when starting the image.
 	if [[ $# -ne 0 ]]; then
-		WriteLog "Calling command:" "${@}"
+		WriteLog "Executing as 'user' the command: " "${@}"
 		sudo --user=user --chdir="$(pwd)" -- "${@}"
 	else
-		WriteLog "No command and logging in as user."
+		WriteLog "No command and logging in as user 'user'."
 		sudo --user=user --chdir="$(pwd)" --login
 	fi
 # When the current user is 'user' execute the script using sudo.
@@ -250,7 +252,7 @@ else
 	WriteLog "User(${HOME}): $(id -u) $(stat "${HOME}" --format='%u:%g') > '${*}'"
 	WriteLog "Entrypoint not running as root which is required!
 When using CLion replace the Docker arguments in the configuration with:
-    --rm --privileged --env LOCAL_USER=\"$(id -u):$(id -u)\"
+    --rm --privileged --env LOCAL_USER=\"$(id -u):$(id -g)\"
   or:
     --rm --privileged --user user:user
 	"
