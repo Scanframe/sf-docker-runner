@@ -208,30 +208,30 @@ ARG COMPRESSION_SUFFIX=".zip"
 ARG NEXUS_SERVER_URL
 ARG NEXUS_RAW_LIB_URL
 # Get the compressed native Qt library.
-RUN if [[ -n "${QT_VERSION}" ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-lnx-$(uname -m)${COMPRESSION_SUFFIX}" || exit 1 ; \
+RUN set -e; if [[ -n "${QT_VERSION}" ]]; then \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-$(uname -m)-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-lnx-$(uname -m)${COMPRESSION_SUFFIX}"; \
     fi
 # Get the compressed Qt cross platform libraries only for the 'x86_64' machines.
-RUN if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-x86_64-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-win-x86_64${COMPRESSION_SUFFIX}" || exit 1 ; \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-aarch64-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-lnx-aarch64${COMPRESSION_SUFFIX}" || exit 1 ; \
-      wget "${NEXUS_RAW_LIB_URL}/qt/qt-w64-x86_64-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-w64-x86_64${COMPRESSION_SUFFIX}" || exit 1 ; \
+RUN set -e; if [[ -n "${QT_VERSION}" && "$(uname -m)" == 'x86_64' ]]; then \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-win-x86_64-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-win-x86_64${COMPRESSION_SUFFIX}"; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-lnx-aarch64-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-lnx-aarch64${COMPRESSION_SUFFIX}"; \
+      wget "${NEXUS_RAW_LIB_URL}/qt/qt-w64-x86_64-${QT_VERSION}${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "qt-w64-x86_64${COMPRESSION_SUFFIX}"; \
     fi
 # Get the tools needed for compiling with MSVC in Wine and build AppImage files on a x86_64 host.
-RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/lnx-x86_64-combi${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-combi${COMPRESSION_SUFFIX}" || exit 1 ; \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/win-x86_64-combi${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "tool-combi${COMPRESSION_SUFFIX}" || exit 1 ; \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-msvc-2022${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-msvc${COMPRESSION_SUFFIX}" || exit 1 ; \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-mingw-1320-posix${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-mingw${COMPRESSION_SUFFIX}" || exit 1 ; \
+RUN set -e; if [[ "$(uname -m)" == 'x86_64' ]]; then \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/lnx-x86_64-combi${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-combi${COMPRESSION_SUFFIX}"; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/win-x86_64-combi${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "tool-combi${COMPRESSION_SUFFIX}"; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-msvc-2022${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-msvc${COMPRESSION_SUFFIX}"; \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/w64-x86_64-mingw-1320-posix${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-mingw${COMPRESSION_SUFFIX}"; \
     fi
 # Get the tools needed for build AppImage files on a aarch64 host.
-RUN if [[ "$(uname -m)" == 'aarch64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/toolchain/lnx-aarch64-combi${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-combi${COMPRESSION_SUFFIX}" || exit 1;\
+RUN set -e; if [[ "$(uname -m)" == 'aarch64' ]]; then \
+      wget "${NEXUS_RAW_LIB_URL}/toolchain/lnx-aarch64-combi${COMPRESSION_SUFFIX}?${NEXUS_TIMESTAMP}" -qO "toolchain-combi${COMPRESSION_SUFFIX}"; \
     fi
 
 # Copy the Windows registry files as a fix since no registry files are created during the build.
-RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz?${NEXUS_TIMESTAMP}" -qO- | tar -C "${WINEPREFIX}" -xzf - || exit 1; \
+RUN set -e; if [[ "$(uname -m)" == 'x86_64' ]]; then \
+      wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz?${NEXUS_TIMESTAMP}" -qO- | tar -C "${WINEPREFIX}" -xzf - ; \
     fi
 
 # Ubuntu 24.04 has a default 'ubuntu' user.
@@ -255,7 +255,7 @@ fi
 EOF
 
 # Create sqlite index files for faster mounting of the zip file.
-RUN ratarmount --recreate-index qt-*${COMPRESSION_SUFFIX} tool*${COMPRESSION_SUFFIX} ''  || echo "" ; ls -la
+RUN shopt -s nullglob; ratarmount --recreate-index qt-*${COMPRESSION_SUFFIX} tool*${COMPRESSION_SUFFIX} || true; ls -la
 
 # Make sure the user inside the docker container has the same ID as the user outside
 COPY --chown="user:user" --chmod=755 bin/*.sh "${HOME}/bin/"

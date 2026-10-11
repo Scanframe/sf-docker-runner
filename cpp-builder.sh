@@ -73,7 +73,9 @@ function show_help {
 
   Commands:
     timestamp       : Create or update the timestamp file '${timestamp_file}' to make it fixed so those layers are not recreated.
-    build           : Builds the docker image tagged '${img_name}:${img_tag}' for self-hosted Nexus repository and requires zipped Qt libraries.
+    build           : Builds the docker image tagged '${img_name}:${img_tag}' from using the base image docker file.
+    build-qt        : Builds the docker image tagged '${img_name}:${img_tag}' using a second Docker file just to
+                      add Qt libs to the exising base image (mostly used in CI/CD pipelines.)
     push            : Pushes the docker image to the self-hosted Nexus repository.
     pull            : Pulls the docker image from the self-hosted Nexus repository.
     base-pull       : Pulls the base image '${base_img_name}:${base_img_tag}' and tags it for the self-hosted docker registry.
@@ -339,13 +341,6 @@ case "${cmd}" in
 	timestamp)
 		date +'%FT%T' >"${timestamp_file}"
 		WriteLog "# Timestamp file set to: $(cat "${timestamp_file}")"
-		;;
-
-	build-push)
-		"${0}" --qt-ver '' build
-		"${0}" build
-		"${0}" --qt-ver '' push
-		"${0}" push
 		;;
 
 	base-pull)
@@ -628,6 +623,29 @@ case "${cmd}" in
 			dckr_cmd+=(--build-arg "${arg}")
 		done
 		dckr_cmd+=(--file "${docker_file}")
+		dckr_cmd+=(--tag "${platform}/${img_name}:${img_tag}")
+		dckr_cmd+=(--network host)
+		dckr_cmd+=("${work_dir}")
+		"${dckr_cmd[@]}"
+		# Add also the private repository tag.
+		docker tag "${platform}/${img_name}:${img_tag}" "${NEXUS_REPOSITORY}/${platform}/${img_name}:${img_tag}"
+		;;
+
+	build-qt)
+		# Qt image derived from the already built and pushed Qt-less base image.
+		if [[ -z "${qt_ver}" ]]; then
+			WriteLog "! A Qt version (--qt-ver) is required for this command."
+			exit 1
+		fi
+		dckr_cmd=(docker build)
+		dckr_cmd+=(--platform "linux/${platform}")
+		dckr_cmd+=(--progress plain)
+		dckr_cmd+=(--build-arg "BASE_IMG=${NEXUS_REPOSITORY}/${platform}/${img_name}:${base_img_tag}")
+		dckr_cmd+=(--build-arg "QT_VERSION=${qt_ver}")
+		dckr_cmd+=(--build-arg "NEXUS_RAW_LIB_URL=${NEXUS_SERVER_URL}/${raw_lib_offset}")
+		dckr_cmd+=(--build-arg "NEXUS_TIMESTAMP=${timestamp}")
+		dckr_cmd+=(--build-arg "COMPRESSION_SUFFIX=${compress_suffix}")
+		dckr_cmd+=(--file "${work_dir}/qt.Dockerfile")
 		dckr_cmd+=(--tag "${platform}/${img_name}:${img_tag}")
 		dckr_cmd+=(--network host)
 		dckr_cmd+=("${work_dir}")
