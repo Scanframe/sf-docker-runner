@@ -1,4 +1,3 @@
-/progress
 /.toolchain-*
 /builder/apt-repo-gpg/*
 /builder/wine-reg/*
@@ -15,3 +14,4 @@ minio/config/*
 /lib/*
 /test-*
 /qt-lnx
+/.docker-timestamp.txt

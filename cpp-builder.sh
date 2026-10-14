@@ -46,7 +46,7 @@ if [[ "${architecture}" == 'aarch64' ]]; then
 	platform='arm64'
 fi
 # Optional timestamp file to make it stop loading compressed files and use the cache.
-timestamp_file="/tmp/docker-import-timestamp.txt"
+timestamp_file="${script_dir}/.docker-timestamp.txt"
 # Default is tar+gzip.
 compress_format=tgz
 
