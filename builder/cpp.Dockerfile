@@ -194,7 +194,7 @@ RUN if [[ "$(uname -m)" == 'x86_64' ]]; then \
       (Xvfb :10 -screen 0 1024x768x24 &) && \
       sudo mkdir "${WINEPREFIX}" && sudo chown user:user "${WINEPREFIX}" && \
       sudo --user=user WINEPREFIX="${WINEPREFIX}" WINEDLLOVERRIDES="mscoree=d" DISPLAY=:10 wineboot && \
-      rm -rf /tmp/wine-* ; \
+      rm -rf /tmp/wine-* && ln -s /tmp "${WINEPREFIX}/drive_c/users/user/Temp" ; \
     fi
 
 # Platform building for.
@@ -248,8 +248,8 @@ if [[ "$(uname -m)" == "x86_64" ]]; then
 
 [HKEY_CURRENT_USER\Environment]
 "PATH"="Z:\\home\\user\\tools\\bin;Z:\\home\\user\\tools\\cmake\\bin;Z:\\home\\user\\tools\\nsis;Z:\\home\\user\\tools\\python;Z:\\home\\user\\tools\\python\\Scripts"
-"TEMP=Z:\\tmp"
-"TMP=Z:\\tmp"
+"TEMP"="Z:\\tmp"
+"TMP"="Z:\\tmp"
 ' > "${HOME}/import.reg"
 fi
 EOF

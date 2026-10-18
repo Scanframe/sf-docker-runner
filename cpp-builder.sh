@@ -142,7 +142,11 @@ docker_file="${work_dir}/cpp.Dockerfile"
 cd "${script_dir}" || exit 1
 
 # Parse options.
-temp=$(getopt -o 'hp:y' --long 'help,platform:,base-image:,project:,base-ver:,base-only,qt-ver:,revision:,compress:,yes' -n "$(basename "${0}")" -- "$@")
+temp=$(
+	getopt -o 'hp:y' \
+		--long 'help,platform:,base-image:,project:,base-ver:,base-only,qt-ver:,revision:,compress:,yes' \
+		-n "$(basename "${0}")" -- "$@"
+)
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
 	show_help
@@ -238,7 +242,7 @@ while true; do
 done
 
 # Determine the used file compression.
-if [[ ${compress_format}  == "zip" ]]; then
+if [[ ${compress_format} == "zip" ]]; then
 	# File compression with zip.
 	compress_suffix=".zip"
 	compress_exclude="-x"
@@ -303,9 +307,7 @@ w64_toolchains+=("w64-x86_64-mingw-1320-posix")
 w64_toolchains+=("w64-x86_64-msvc-2022")
 w64_toolchains+=("w64-x86_64-msvc-2026")
 
-
 timestamp="$(cat "${timestamp_file}" 2>/dev/null || date +'%FT%T')"
-
 
 # Get the subcommand.
 cmd=""
