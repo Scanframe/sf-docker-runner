@@ -231,7 +231,10 @@ RUN set -e; if [[ "$(uname -m)" == 'aarch64' ]]; then \
 
 # Copy the Windows registry files as a fix since no registry files are created during the build.
 RUN set -e; if [[ "$(uname -m)" == 'x86_64' ]]; then \
-      wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz?${NEXUS_TIMESTAMP}" -qO- | tar -C "${WINEPREFIX}" -xzf - ; \
+      wget "${NEXUS_RAW_LIB_URL}/wine-reg.tgz?${NEXUS_TIMESTAMP}" -qO- | tar -C "${WINEPREFIX}" -xzf - && \
+      mkdir "${WINEPREFIX}/drive_c/windows/system32/original" && \
+      mv "${WINEPREFIX}/drive_c/windows/system32/mscms.dll" "${WINEPREFIX}/drive_c/windows/system32/original/" && \
+      wget "${NEXUS_RAW_LIB_URL}/mscms-wine.tgz?${NEXUS_TIMESTAMP}" -qO- | tar -C "${WINEPREFIX}/drive_c/windows/system32" -xzf - ; \
     fi
 
 # Ubuntu 24.04 has a default 'ubuntu' user.
