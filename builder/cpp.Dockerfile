@@ -24,7 +24,8 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get --yes upgrade --no-install-recommends && \
-    apt-get --yes install wget curl zip gpg lsb-release software-properties-common iproute2 iputils-ping binutils rsync openssh-server && \
+    apt-get --yes install --no-install-recommends wget curl zip gpg lsb-release software-properties-common \
+    iproute2 iputils-ping binutils rsync openssh-server && \
     mkdir /run/sshd && \
     add-apt-repository --yes --no-update ppa:git-core/ppa && \
     wget --quiet "https://apt.llvm.org/llvm-snapshot.gpg.key" -O /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
@@ -35,14 +36,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=bind,source=debian-pkgs,target=/tmp/debian-pkgs \
-    (apt-get --yes install clang-format || apt-get --yes install /tmp/debian-pkgs/clang-format-fix.deb) && apt-get --yes install \
-    locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb-mingw-w64-target ccache gdb gdbserver valgrind chrpath dpkg-dev \
-    patchelf bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep default-jre-headless joe mc colordiff dos2unix shfmt pkg-config \
+    (apt-get --yes install --no-install-recommends clang-format ||  \
+    apt-get --yes install --no-install-recommends /tmp/debian-pkgs/clang-format-fix.deb) && \
+    apt-get --yes install --no-install-recommends \
+    locales sudo git make cmake ninja-build gcc g++ g++-mingw-w64-x86-64 gdb-mingw-w64-target ccache gdb gdbserver \
+    valgrind chrpath dpkg-dev patchelf bindfs fuse-zip exif doxygen graphviz dialog jq recode pcregrep \
+    default-jre-headless joe mc colordiff dos2unix shfmt pkg-config \
     python3 python3-venv python3-dev python3-pefile python3-pyelftools python3-requests python-is-python3 \
     libopengl0 libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-dev libxkbfile-dev libvulkan-dev libssl-dev libunwind-dev \
-    strace exiftool rpm nsis x11-apps xcb libxkbcommon-x11-0 libxcb-xinput0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 libxcb-image0 \
-    libxcb-keysyms1 libxcb-render-util0 xvfb libpcre2-16-0 libzstd-dev \
-    libpulse0 pulseaudio-utils libavformat60 libswscale7 libavcodec60 libswresample4 libavutil58 pipewire-audio-client-libraries
+    strace exiftool rpm nsis x11-apps xcb libxkbcommon-x11-0 libxcb-xinput0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 \
+    libxcb-image0 libxcb-keysyms1 libxcb-render-util0 xvfb libpcre2-16-0 libzstd-dev \
+    pulseaudio pulseaudio-utils libavformat60 libswscale7
 
 # Switch to add 32-bit Wine (i386) support, enabled by default. Disable with: --build-arg WINE32=false
 # Only applies to 'x86_64' machines and adds several hundred MB to the image but sadlyu needed for the MSVC toolchain to run.
@@ -59,12 +63,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       if [[ "${WINE32}" == 'true' ]]; then \
         ( \
           apt-get --yes install --simulate winehq-stable && \
-          apt-get --yes install wine32:i386 wine64 winehq-stable || apt-get --yes install wine32:i386 wine64 wine \
+          apt-get --yes install --no-install-recommends wine32:i386 wine64 winehq-stable || \
+          apt-get --yes install --no-install-recommends wine32:i386 wine64 wine \
         ) ; \
       else \
         ( \
           apt-get --yes install --simulate winehq-stable && \
-          apt-get --yes install winehq-stable || apt-get --yes install wine64 wine \
+          apt-get --yes install --no-install-recommends winehq-stable || apt-get --yes install --no-install-recommends wine64 wine \
         ) ; \
       fi ; \
     fi
@@ -95,7 +100,7 @@ Architectures: arm64\n\
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\
 " >/etc/apt/sources.list.d/ubuntu-arm64.sources; \
     dpkg --add-architecture arm64 && apt-get update; \
-    apt-get --yes install gcc-aarch64-linux-gnu:amd64 g++-aarch64-linux-gnu:amd64 binutils-aarch64-linux-gnu:amd64 \
+    apt-get --yes install --no-install-recommends gcc-aarch64-linux-gnu:amd64 g++-aarch64-linux-gnu:amd64 binutils-aarch64-linux-gnu:amd64 \
     libgles-dev:arm64 libegl-dev:arm64 libgl-dev:arm64 libpcre2-16-0:arm64 libglvnd-dev:arm64 libpng16-16t64:arm64 \
     xcb:arm64 libxkbcommon-x11-0:arm64 libxcb-xinput0:arm64 libxcb-cursor0:arm64 libxcb-shape0:arm64 libpulse0:arm64 \
     libxcb-icccm4:arm64 libxcb-image0:arm64 libxcb-keysyms1:arm64 libxcb-render-util0:arm64 libdbus-1-3:arm64 \
@@ -165,8 +170,8 @@ if [ -d \"\$HOME/bin\" ] ; then\n\
     PATH=\"\$HOME/bin:\$PATH\"\n\
 fi\n\
 # Source the display script when made available.\n\
-if [ -f "\$HOME/.display.sh" ] ; then\n\
-    source "\$HOME/.display.sh"\n\
+if [ -f "\$HOME/.environment.sh" ] ; then\n\
+    source "\$HOME/.environment.sh"\n\
 fi\n\
 " | tee "${HOME}/.profile" > "${HOME}/.bash_profile"
 

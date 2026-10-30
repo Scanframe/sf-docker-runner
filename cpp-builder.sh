@@ -695,9 +695,16 @@ case "${cmd}" in
 			# Check if the host has a X11 display running at all.
 			if [[ -z "${DISPLAY}" || ! -f "${HOME}/.Xauthority" ]]; then
 				WriteLog "! Cannot pass X11, DISPLAY or .Xauthority not available."
+			else
+				dckr_cmd+=(--env DISPLAY)
+				dckr_cmd+=(--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro")
 			fi
-			dckr_cmd+=(--env DISPLAY)
-			dckr_cmd+=(--volume "${HOME}/.Xauthority:/home/user/.Xauthority:ro")
+			if [[ -z "${XDG_RUNTIME_DIR}" ]]; then
+				WriteLog "! Cannot pass XDG_RUNTIME_DIR not available."
+  		else
+				dckr_cmd+=(--env XDG_RUNTIME_DIR)
+				dckr_cmd+=(--volume "${XDG_RUNTIME_DIR}:${XDG_RUNTIME_DIR}")
+			fi
 		fi
 		if [[ -d "${HOME}/tmp/qt-lnx" ]]; then
 			dckr_cmd+=(--volume "${HOME}/tmp/qt-lnx:/tmp/qt-lnx:rw")

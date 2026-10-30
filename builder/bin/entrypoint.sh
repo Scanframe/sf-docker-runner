@@ -47,7 +47,7 @@ trap 'ScriptExit "${BASH_SOURCE}" "${BASH_LINENO}" "${BASH_COMMAND}"' EXIT
 if [[ "$(id -u)" -eq 0 ]]; then
 	# When the LOCAL user id and group are not given.
 	if [[ -n "${LOCAL_USER}" ]]; then
-		WriteLog "User uid:gid (${LOCAL_USER}) from passed environment variable 'LOCAL_USER'."
+		WriteLog "User uid:gid from passed environment variable 'LOCAL_USER': ${LOCAL_USER}"
 	else
 		# Try taking them from the mounted project directory if it exists.
 		if mountpoint -q /mnt/project; then
@@ -72,15 +72,19 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	[[ -d /mnt/project && ! -L ~/project ]] && ln --symbolic /mnt/project ~/project
 	# Check if the wine-prefix directory available.
 	if [[ -d "${WINEPREFIX}" ]]; then
-		sudo --user=user mkdir "${HOME}/.wine"
-		if ! bindfs --map="${USER_ID}/user:@${GROUP_ID}/@user" "${WINEPREFIX}" "${HOME}/.wine"; then
-			WriteLog "Binding wine-prefix '${WINEPREFIX}' onto '${HOME}/.wine' failed!"
+		bind_dir="${HOME}/.wine"
+		sudo --user=user mkdir "${bind_dir}"
+		if ! bindfs --map="${USER_ID}/user:@${GROUP_ID}/@user" "${WINEPREFIX}" "${bind_dir}"; then
+			WriteLog "Failed binding wine-prefix '${WINEPREFIX}' on: ${bind_dir}"
 			exit 1
 		fi
-		WriteLog "Wine prefix '${WINEPREFIX}' bound to '${HOME}/.wine'."
+		WriteLog "Wine prefix '${WINEPREFIX}' bound to: ${bind_dir}"
+		# Reassign the Wine prefix to the new bind.
+		WINEPREFIX="${bind_dir}"
+		
 		# Check if an import registry is available.
 		if [[ -f "${HOME}/import.reg" ]]; then
-			WriteLog "Importing registry file '${HOME}/import.reg'."
+			WriteLog "Importing registry file: ${HOME}/import.reg"
 			sudo --user=user wine regedit "${HOME}/import.reg" 2>/dev/null
 		fi
 		# Directory of the compressed Wine applications.
@@ -103,7 +107,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 					# Create the application directory for mounting on.
 					if mkdir --parent "${app_dir}" && sudo chown user:user "${app_dir}"; then
 						if ! fuse-zip -o rw,nonempty,allow_other "${zip_file_path}" "${app_dir}"; then
-							WriteLog "Mounting Wine application compressed file '${zip_file}' onto '${app_dir}' failed!"
+							WriteLog "Failed mounting Wine application compressed file '${zip_file}' on: ${app_dir}"
 						fi
 					fi
 				done < <(find "${wine_apps_zip_dir}" -maxdepth 1 -type f -name "*.zip")
@@ -126,9 +130,9 @@ if [[ "$(id -u)" -eq 0 ]]; then
 		if [[ -f "${zip_file}" ]]; then
 			mount_dir="${HOME}/tools"
 			if ! ratarmount -o ro,allow_other "${zip_file}" "${mount_dir}" >/dev/null; then
-				WriteLog "Mounting tool-combi compressed file '${zip_file}' onto '${mount_dir}' failed!"
+				WriteLog "Failed mounting tool-combi compressed file '${zip_file}' on: ${mount_dir}"
 			else
-				WriteLog "Compressed tool-combi compressed file '${zip_file}' is mounted on '${mount_dir}'."
+				WriteLog "Compressed tool-combi compressed file '${zip_file}' is mounted on: ${mount_dir}"
 			fi
 		fi
 	done
@@ -137,19 +141,20 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	mapfile -d '' zip_files < <(find "${HOME}" -maxdepth 1 -type f \( -name "toolchain-*.zip" -o -name "toolchain-*.tar.gz" \) -print0)
 	# Check if toolchain files were found.
 	if [[ "${#zip_files[@]}" -ne 0 ]]; then
+		mount_dir="${HOME}/toolchain"
 		# No need to create a mount directory ratarmount does it all.
-		if ! ratarmount -o ro,allow_other "${zip_files[@]}" "${HOME}/toolchain" >/dev/null; then
-			WriteLog "Mounting toolchain compressed files onto '${mount_dir}' failed!"
+		if ! ratarmount -o ro,allow_other "${zip_files[@]}" "${mount_dir}" >/dev/null; then
+			WriteLog "Failed mounting toolchain compressed files on: ${mount_dir}"
 		else
-			WriteLog "Compressed toolchain files are mounted on '${mount_dir}'."
+			WriteLog "Compressed toolchain files are mounted on: ${mount_dir}"
 		fi
 	fi
 
 	# Check if the Qt compressed libraries are available.
 	local_mount="/usr/local/lib/qt"
-	WriteLog "Checking for mount at '${local_mount}'."
+	WriteLog "Checking for mount at: ${local_mount}"
 	if [[ -d "${local_mount}" ]]; then
-		WriteLog "Qt library is available from '${local_mount}'."
+		WriteLog "Qt library is available from: ${local_mount}"
 		mkdir --parents "${HOME}/lib"
 		ln -s "${local_mount}" "${HOME}/lib/qt"
 	else
@@ -159,7 +164,7 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			# Get the qt compressed files if they exists and ignore variable 'SF_QT_VERSION'.
 			shopt -s nullglob; qt_files=("${HOME}/"qt-*.zip "${HOME}/"qt-*.tar.gz); shopt -u nullglob
 			if [[ ${#qt_files[@]} -ne 0 ]]; then
-				WriteLog "Found '${#qt_files[@]}' and ignoring set 'SF_QT_VERSION' to '${SF_QT_VERSION}'."
+				WriteLog "Found '${#qt_files[@]}' and ignoring set 'SF_QT_VERSION' to: ${SF_QT_VERSION}"
 			else
 				# Set the compression suffix of the file to download.
 				file_suffix=".tar.gz"
@@ -194,11 +199,11 @@ if [[ "$(id -u)" -eq 0 ]]; then
 				mount_cmd+=("${zip_file}" "${mount_dir}")
 				if mkdir --parent "${mount_dir}"; then
 					if ! "${mount_cmd[@]}" >/dev/null; then
-						WriteLog "Mounting Qt library compressed file '${zip_file}' onto '${mount_dir}' failed!"
+						WriteLog "Failed mounting Qt library compressed file '${zip_file}' on: ${mount_dir}"
 					else
 						# shellcheck disable=SC212
 						arch_qt_ver_dir["${BASH_REMATCH[1]}"]="$(find "${mount_dir}" -maxdepth 1 -type d -regex ".*/[0-9]+\.[0-9]+\.[0-9]+$")"
-						WriteLog "Qt compressed '${BASH_REMATCH[2]}' library is mounted on '${mount_dir}'."
+						WriteLog "Qt compressed '${BASH_REMATCH[2]}' library is mounted on: ${mount_dir}"
 					fi
 				fi
 			fi
@@ -223,13 +228,27 @@ if [[ "$(id -u)" -eq 0 ]]; then
 			break
 		fi
 	done
+	# Create the environment file for the executing user.
+	echo "#!/usr/bin/env bash" >"${HOME}/.environment.sh"
+	chmod +rx "${HOME}/.environment.sh"
+
 	# Check if the host has the X11 display passed.
 	if [[ -n "${DISPLAY}" && -f "${HOME}/.Xauthority" ]]; then
 		# Create file for profile to import to be used when running sshd.
-		echo "export DISPLAY=${DISPLAY}" >"${HOME}/.display.sh"
+		echo "export DISPLAY=${DISPLAY}" >>"${HOME}/.environment.sh"
 		echo "DISPLAY=${DISPLAY}" >>"${HOME}/.ssh/environment"
 	fi
 	chown user:user -R "${HOME}/.ssh"
+	# Pass the 'XDG_RUNTIME_DIR' when set and create a dummy audio device.
+	if [[ -n "${XDG_RUNTIME_DIR}" ]]; then
+		WriteLog "Passing host audio using variable 'XDG_RUNTIME_DIR': ${XDG_RUNTIME_DIR}"
+		echo "export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}" >>"${HOME}/.environment.sh"
+	else
+		WriteLog "Setting up dummy audio device."
+		sudo --user=user --chdir="$(pwd)" -- pulseaudio --daemonize=true --exit-idle-time=-1 \
+			--load="module-null-sink sink_name=dummy sink_properties=device.description=Dummy"
+		sudo --user=user --chdir="$(pwd)" -- pactl set-default-sink dummy
+	fi
 
 	# Prevent any errors when resolving git tags.
 	git config --global --add safe.directory '*'
@@ -237,9 +256,9 @@ if [[ "$(id -u)" -eq 0 ]]; then
 	# Execute CMD passed by the user when starting the image.
 	if [[ $# -ne 0 ]]; then
 		WriteLog "Executing as 'user' the command: " "${@}"
-		sudo --user=user --chdir="$(pwd)" -- "${@}"
+		sudo -E --user=user --chdir="$(pwd)" -- "${@}"
 	else
-		WriteLog "No command and logging in as user 'user'."
+		WriteLog "No command and logging in as user: user"
 		sudo --user=user --chdir="$(pwd)" --login
 	fi
 # When the current user is 'user' execute the script using sudo.
